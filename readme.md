@@ -36,9 +36,9 @@ Ce projet vise à fournir une vue synthétique, ergonomique et personnalisable d
 ### Démarrage rapide
 
 ```bash
-git clone <repo>
-cd news_bot/rss_parser
-python3 main.py
+git clone https://github.com/joblinours/SecuDash.git
+python3 SecuDash/api/cve.py
+python3 SecuDash/main/main.py
 ```
 
 - Accédez à [http://localhost:5000](http://localhost:5000) dans votre navigateur.
@@ -58,10 +58,6 @@ python3 main.py
 - **Modifier les marchés surveillés** : éditez `markets.json`
 - **Changer les raccourcis** : éditez `shortcuts.json` (icônes FontAwesome supportées)
 - **Adapter le style** : modifiez le HTML/CSS dans `main.py` (template inline)
-
-## Démo
-
-Lancez simplement `main.py` puis ouvrez le navigateur sur le port 5000.
 
 ## Licence
 
