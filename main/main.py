@@ -5,13 +5,8 @@ import requests
 from flask import Flask, jsonify, render_template_string, request
 from threading import Thread
 import datetime
-
-# Ajout pour la carte
 import math
-
-# Remplacement investpy par tvdatafeed
-# from tvDatafeed import TvDatafeed, Interval
-import yfinance as yf  # Ajout pour remplacer tvDatafeed
+import yfinance as yf
 
 app = Flask(__name__)
 NEWS_LIMIT = 20
@@ -343,6 +338,54 @@ def index():
                 min-height: 100vh;
                 color: #f7f6f1;
             }
+            /* Harmonise l'espace au-dessus et en dessous de la barre de recherche Google */
+            .google-search-bar-container {
+                width: 100%;
+                max-width: 1200px;
+                margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
+                display: flex;
+                justify-content: center;
+            }
+            /* Ajoute un espace sous la carte ransomware */
+            .ransomware-map-container {
+                display: flex;
+                flex-direction: row;
+                width: 100%;
+                max-width: 1200px;
+                margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
+                background: #232320;
+                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+                border-radius: 16px;
+                min-height: 320px;
+                overflow: hidden;
+                border: 1.5px solid #232320;
+            }
+            /* Ajoute un espace sous le panneau victimes */
+            .victims-panel {
+                width: 35%;
+                min-width: 220px;
+                max-width: 400px;
+                background: #232320;
+                border-left: 1.5px solid #282926;
+                padding: 1.1em 0.7em 1.1em 1.1em;
+                overflow-y: auto;
+                height: 320px;
+                border-radius: 0 16px 16px 0;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+                z-index: 5;
+                margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
+            }
+            #ransom-map {
+                width: 100%;
+                height: 320px;
+                border-radius: 16px 0 0 16px;
+                margin: 0;
+                box-shadow: none;
+                background: #1e1f1d;
+            }
             .dashboard-cards, .dashboard-main, .ransomware-map-container, .google-search-bar-container {
                 max-width: 95vw !important;
                 width: 95vw !important;
@@ -418,7 +461,7 @@ def index():
             .dashboard-left, .dashboard-right {
                 display: flex;
                 flex-direction: column;
-                gap: 2em;
+                gap: 0.5em;
             }
             .dashboard-left {
                 flex: 1.5 1 0;
@@ -735,7 +778,7 @@ def index():
                 flex-direction: row;
                 width: 100%;
                 max-width: 1200px;
-                margin: 2em auto 0 auto;
+                margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
                 background: #232320;
                 box-shadow: 0 2px 12px rgba(30,31,29,0.13);
                 border-radius: 16px;
@@ -774,6 +817,7 @@ def index():
                 flex-direction: column;
                 position: relative;
                 z-index: 5;
+                margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
             }
             .victims-panel-title {
                 color: #e63a30;
@@ -945,7 +989,7 @@ def index():
             .google-search-bar-container {
                 width: 100%;
                 max-width: 1200px;
-                margin: 0.7em auto 0.5em auto; /* réduit la marge top */
+                margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
                 display: flex;
                 justify-content: center;
             }
@@ -1000,6 +1044,25 @@ def index():
                 font-size: 1.1em;
                 vertical-align: middle;
             }
+            /* Ajout style pour le bouton de tri actualités */
+            .news-sort-btn {
+                background: none;
+                border: none;
+                color: #e63a30;
+                font-size: 1.25em;
+                cursor: pointer;
+                margin-left: 0.3em;
+                transition: color 0.13s;
+                display: flex;
+                align-items: center;
+                padding: 0 0.2em;
+            }
+            .news-sort-btn:hover {
+                color: #f7f6f1;
+            }
+            .news-sort-btn:focus {
+                outline: 2px solid #e63a30;
+            }
         </style>
         <script>
             // Données initiales côté client
@@ -1047,6 +1110,8 @@ def index():
                 html += "</ul>";
                 return html;
             }
+            let newsSortAsc = false; // false = décroissant (plus récent en haut)
+
             // Recherche dynamique actualités
             function renderNews() {
                 const search = (document.getElementById('news-search-input')?.value || '').toLowerCase();
@@ -1057,6 +1122,11 @@ def index():
                         item.source.toLowerCase().includes(search)
                     );
                 }
+                // Tri selon newsSortAsc
+                filtered = filtered.slice().sort((a, b) => {
+                    const da = new Date(a.published), db = new Date(b.published);
+                    return newsSortAsc ? da - db : db - da;
+                });
                 const ul = document.getElementById('news-list');
                 ul.innerHTML = '';
                 filtered.slice(0, 20).forEach(item => {
@@ -1079,6 +1149,14 @@ def index():
                         });
                     }
                 });
+                // Met à jour l'icône du bouton de tri
+                const sortBtn = document.getElementById('news-sort-btn');
+                if (sortBtn) {
+                    sortBtn.innerHTML = newsSortAsc
+                        ? '<i class="fa-solid fa-arrow-up"></i>'
+                        : '<i class="fa-solid fa-arrow-down"></i>';
+                    sortBtn.title = newsSortAsc ? "Trier par date croissante" : "Trier par date décroissante";
+                }
             }
             // Trie et affiche la liste des CVE selon le critère sélectionné
             function renderCVEs() {
@@ -1243,6 +1321,9 @@ def index():
                             <div class="news-search-bar">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" id="modal-news-search-input" placeholder="Rechercher une actualité..."/>
+                                <button type="button" class="news-sort-btn" id="modal-news-sort-btn" title="Trier par date décroissante">
+                                    <i class="fa-solid fa-arrow-down"></i>
+                                </button>
                             </div>
                             <ul class="news-list" id="modal-news-list"></ul>
                         </div>`;
@@ -1285,6 +1366,11 @@ def index():
                                 item.source.toLowerCase().includes(search)
                             );
                         }
+                        // Tri selon newsSortAsc (partagé avec la vue principale)
+                        filtered = filtered.slice().sort((a, b) => {
+                            const da = new Date(a.published), db = new Date(b.published);
+                            return newsSortAsc ? da - db : db - da;
+                        });
                         const ul = document.getElementById('modal-news-list');
                         ul.innerHTML = '';
                         filtered.forEach(item => {
@@ -1307,9 +1393,25 @@ def index():
                                 });
                             }
                         });
+                        // Met à jour l'icône du bouton de tri modal
+                        const sortBtn = document.getElementById('modal-news-sort-btn');
+                        if (sortBtn) {
+                            sortBtn.innerHTML = newsSortAsc
+                                ? '<i class="fa-solid fa-arrow-up"></i>'
+                                : '<i class="fa-solid fa-arrow-down"></i>';
+                            sortBtn.title = newsSortAsc ? "Trier par date croissante" : "Trier par date décroissante";
+                        }
                     }
                     renderModalNews();
                     document.getElementById('modal-news-search-input').addEventListener('input', renderModalNews);
+                    // Ajout gestion bouton de tri modal
+                    const sortBtn = document.getElementById('modal-news-sort-btn');
+                    if (sortBtn) {
+                        sortBtn.addEventListener('click', function() {
+                            newsSortAsc = !newsSortAsc;
+                            renderModalNews();
+                        });
+                    }
                 } else if (type === 'cves') {
                     function renderModalCVEs() {
                         const sortValue = document.getElementById('modal-cve-sort-select').value;
@@ -1503,6 +1605,14 @@ def index():
                 if (searchInput) {
                     searchInput.addEventListener('input', renderNews);
                 }
+                // Ajout gestion bouton de tri actualités
+                const sortBtn = document.getElementById('news-sort-btn');
+                if (sortBtn) {
+                    sortBtn.addEventListener('click', function() {
+                        newsSortAsc = !newsSortAsc;
+                        renderNews();
+                    });
+                }
                 // Carte ransomware + markers
                 if (document.getElementById('ransom-map')) {
                     map = L.map('ransom-map', {scrollWheelZoom: false, zoomControl: true, attributionControl: false}).setView([48, 8], 4.1);
@@ -1576,7 +1686,7 @@ def index():
         <div class="google-search-bar-container">
             <form class="google-search-bar" onsubmit="event.preventDefault(); if(googleSearchInput.value.trim().length>0){window.open('https://www.google.com/search?q='+encodeURIComponent(googleSearchInput.value.trim()),'_blank');}">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="google-search-input" name="googleSearchInput" placeholder="Recherche Google..."/>
+                <input type="text" id="google-search-input" name="googleSearchInput" placeholder="made with <3 by jobl1n0urs"/>
             </form>
         </div>
         <!-- Déplacement de la carte ransomware juste après -->
@@ -1621,6 +1731,9 @@ def index():
                     <div class="news-search-bar">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input type="text" id="news-search-input" placeholder="Rechercher une actualité..."/>
+                        <button type="button" class="news-sort-btn" id="news-sort-btn" title="Trier par date décroissante">
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </button>
                     </div>
                     <div class="card-content-scroll">
                         <ul class="news-list" id="news-list"></ul>
@@ -1650,10 +1763,6 @@ def index():
         <!-- MODAL OVERLAY -->
         <div class="modal-overlay" id="modal-overlay">
             <div class="modal-content" id="modal-content"></div>
-        </div>
-        <!-- Ajout du footer -->
-        <div class="footer-madeby">
-            made with <span class="heart">&lt;3</span> by jobl1n0urs
         </div>
     </body>
     </html>
