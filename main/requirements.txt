@@ -1,0 +1,10 @@
+Flask
+Werkzeug
+feedparser
+requests
+yfinance
+gunicorn
+python-dateutil
+numpy
+pandas
+datetime

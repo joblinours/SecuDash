@@ -5,47 +5,163 @@ import requests
 from flask import Flask, jsonify, render_template_string, request
 from threading import Thread
 import datetime
+from datetime import timedelta
 import math
 import yfinance as yf
+import os
+import sys
 
 app = Flask(__name__)
 NEWS_LIMIT = 20
-news_cache = []
+
+# --- CONFIGURATION ---
+# Utilisation de chemins absolus basés sur le répertoire de l'application
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_DIR = os.path.join(BASE_DIR, ".config")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "secu_dash_config.json")
+CACHE_DIR = os.path.join(BASE_DIR, ".cache")
+CACHE_FILES = {
+    "news": os.path.join(CACHE_DIR, "news.json"),
+    "cves": os.path.join(CACHE_DIR, "cves.json"),
+    "ransomware": os.path.join(CACHE_DIR, "ransomware.json"),
+    "markets": os.path.join(CACHE_DIR, "markets.json"),
+}
+DEFAULT_REFRESH_MINUTES = 60
+
+
+# Assurez-vous que les répertoires requis existent
+def ensure_dirs():
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def ensure_cache_dir():
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+# --- Fonction pour charger les fichiers de configuration ---
+def load_file(file_path, default=None):
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Erreur lors du chargement de {file_path}: {e}", file=sys.stderr)
+        return default if default is not None else []
+
+
+def load_config():
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+            return int(cfg.get("refresh_minutes", DEFAULT_REFRESH_MINUTES))
+    except Exception:
+        return DEFAULT_REFRESH_MINUTES
+
+
+def cache_is_fresh(cache_file, refresh_minutes):
+    if not os.path.exists(cache_file):
+        return False
+    mtime = os.path.getmtime(cache_file)
+    age = (time.time() - mtime) / 60
+    return age < refresh_minutes
+
+
+def load_cache(cache_file):
+    try:
+        with open(cache_file, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def save_cache(cache_file, data):
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+# --- DATA FETCHERS (inchangés sauf ajout save_cache) ---
 
 
 def load_feeds():
-    with open("../rss_feeds.json", encoding="utf-8") as f:
-        return json.load(f)
+    feed_path = os.path.join(CONFIG_DIR, "rss_feeds.json")
+    return load_file(feed_path, default=[])
 
 
 def fetch_news():
-    global news_cache
     feeds = load_feeds()
     all_news = []
     for feed in feeds:
-        parsed = feedparser.parse(feed["url"])
-        for entry in parsed.entries[:5]:
-            all_news.append(
-                {
-                    "title": entry.title,
-                    "link": entry.link,
-                    "published": entry.get("published", ""),
-                    "source": feed["title"],
-                }
+        try:
+            parsed = feedparser.parse(feed["url"])
+            for entry in parsed.entries[:5]:
+                all_news.append(
+                    {
+                        "title": entry.title,
+                        "link": entry.link,
+                        "published": entry.get("published", ""),
+                        "source": feed["title"],
+                    }
+                )
+        except Exception as e:
+            print(
+                f"Erreur lors de l'analyse du flux {feed['url']}: {e}", file=sys.stderr
             )
-    # Trie par date décroissante
     all_news.sort(key=lambda x: x["published"], reverse=True)
-    news_cache = all_news[:NEWS_LIMIT]
+    return all_news[:NEWS_LIMIT]
 
 
 def fetch_cves():
+    """Récupère les CVE critiques des dernières 24 heures directement depuis l'API NVD."""
     try:
-        resp = requests.get("http://localhost:5001/cves", timeout=5)
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception:
-        pass
-    return []
+        end_date = datetime.datetime.utcnow().replace(microsecond=0)
+        start_date = end_date - timedelta(days=1)
+        start_iso = start_date.strftime("%Y-%m-%dT00:00:00.000Z")
+        end_iso = end_date.strftime("%Y-%m-%dT23:59:59.999Z")
+        url = "https://services.nvd.nist.gov/rest/json/cves/2.0/"
+        params = {"pubStartDate": start_iso, "pubEndDate": end_iso}
+        headers = {"User-Agent": "SecuDash CVE Fetcher"}
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        cves = []
+        if response.status_code == 200:
+            data = response.json()
+            for item in data.get("vulnerabilities", []):
+                cve_data = item.get("cve", {})
+                cve_id = cve_data.get("id", "N/A")
+                published = cve_data.get("published", "N/A")
+                metrics = cve_data.get("metrics", {})
+                score = None
+                if "cvssMetricV31" in metrics:
+                    score = metrics["cvssMetricV31"][0]["cvssData"]["baseScore"]
+                elif "cvssMetricV30" in metrics:
+                    score = metrics["cvssMetricV30"][0]["cvssData"]["baseScore"]
+                if score is not None and score >= 8.0:
+                    descriptions = cve_data.get("descriptions", [])
+                    desc = ""
+                    for d in descriptions:
+                        if d.get("lang") == "en":
+                            desc = d.get("value", "")
+                            break
+                    if not desc and descriptions:
+                        desc = descriptions[0].get("value", "")
+                    max_len = 120
+                    if len(desc) > max_len:
+                        desc = desc[:max_len].rstrip() + "..."
+                    cves.append(
+                        {
+                            "id": cve_id,
+                            "score": score,
+                            "published": published,
+                            "description": desc,
+                        }
+                    )
+        return cves
+    except Exception as e:
+        print(f"Erreur lors de la récupération des CVEs: {e}", file=sys.stderr)
+        return []
 
 
 def fetch_ransomware():
@@ -184,8 +300,8 @@ def fetch_ransomware():
 
 
 def load_markets():
-    with open("../markets.json", encoding="utf-8") as f:
-        return json.load(f)
+    markets_path = os.path.join(CONFIG_DIR, "markets.json")
+    return load_file(markets_path, default=[])
 
 
 def fetch_market_data():
@@ -282,40 +398,119 @@ def fetch_market_data():
 
 
 def load_shortcuts():
-    try:
-        with open("../shortcuts.json", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    shortcuts_path = os.path.join(CONFIG_DIR, "shortcuts.json")
+    return load_file(shortcuts_path, default=[])
 
 
-def background_fetch():
+# --- CACHE MANAGEMENT ---
+
+
+def get_data_with_cache(key, fetch_func):
+    ensure_cache_dir()
+    cache_file = CACHE_FILES[key]
+    refresh_minutes = load_config()
+    if cache_is_fresh(cache_file, refresh_minutes):
+        return load_cache(cache_file)
+    data = fetch_func()
+    save_cache(cache_file, data)
+    return data
+
+
+def background_refresh():
     while True:
-        fetch_news()
-        time.sleep(300)  # 5 minutes
+        refresh_minutes = load_config()
+        # News
+        news = fetch_news()
+        save_cache(CACHE_FILES["news"], news)
+        # CVEs
+        cves = fetch_cves()
+        save_cache(CACHE_FILES["cves"], cves)
+        # Ransomware
+        ransomware = fetch_ransomware()
+        save_cache(CACHE_FILES["ransomware"], ransomware)
+        # Markets
+        markets = fetch_market_data()
+        save_cache(CACHE_FILES["markets"], markets)
+        # Sleep
+        time.sleep(refresh_minutes * 60)
+
+
+# --- COULEURS ---
+
+
+def load_colors():
+    """Charge les couleurs principales depuis la config, avec fallback."""
+    default = {"main": "#e63a30", "bg": "#181a1b", "card": "#232320", "text": "#f7f6f1"}
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+            colors = cfg.get("colors", {})
+            # fallback sur chaque clé
+            for k in default:
+                if k not in colors:
+                    colors[k] = default[k]
+            return colors
+    except Exception:
+        return default
+
+
+def hex_to_rgb(hex_color):
+    """Convertit #rrggbb -> tuple (r,g,b)"""
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def rgb_to_hex(rgb):
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def adjust_brightness(rgb, factor):
+    """Ajuste la luminosité (factor<1=plus sombre, >1=plus clair)"""
+    return tuple(min(255, max(0, int(c * factor))) for c in rgb)
+
+
+def make_gradient(main_hex):
+    """Retourne un dégradé linéaire CSS à partir de la couleur principale."""
+    rgb = hex_to_rgb(main_hex)
+    light = rgb_to_hex(adjust_brightness(rgb, 1.12))
+    dark = rgb_to_hex(adjust_brightness(rgb, 0.82))
+    return f"linear-gradient(90deg, {main_hex}22 60%, transparent 100%)", light, dark
+
+
+# --- FLASK ENDPOINTS ---
 
 
 @app.route("/news")
 def get_news():
-    return jsonify(news_cache)
+    news = get_data_with_cache("news", fetch_news)
+    return jsonify(news)
 
 
 @app.route("/ransomware")
 def ransomware_api():
-    return jsonify(fetch_ransomware())
+    ransomware = get_data_with_cache("ransomware", fetch_ransomware)
+    return jsonify(ransomware)
 
 
 @app.route("/markets")
 def markets_api():
-    return jsonify(fetch_market_data())
+    markets = get_data_with_cache("markets", fetch_market_data)
+    return jsonify(markets)
 
 
 @app.route("/")
 def index():
-    cves = fetch_cves()
-    ransomware = fetch_ransomware()
-    markets = fetch_market_data()
+    news = get_data_with_cache("news", fetch_news)
+    cves = get_data_with_cache("cves", fetch_cves)
+    ransomware = get_data_with_cache("ransomware", fetch_ransomware)
+    markets = get_data_with_cache("markets", fetch_market_data)
     shortcuts = load_shortcuts()
+    colors = load_colors()
+    main_color = colors["main"]
+    bg_color = colors["bg"]
+    card_color = colors["card"]
+    text_color = colors["text"]
+    gradient, main_light, main_dark = make_gradient(main_color)
     html = """
     <!DOCTYPE html>
     <html lang="fr">
@@ -331,738 +526,753 @@ def index():
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
         <style>
-            body {
-                font-family: 'Montserrat', Arial, sans-serif;
-                margin: 0;
-                background: #181a1b;
-                min-height: 100vh;
-                color: #f7f6f1;
-            }
-            /* Harmonise l'espace au-dessus et en dessous de la barre de recherche Google */
-            .google-search-bar-container {
-                width: 100%;
-                max-width: 1200px;
-                margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
-                display: flex;
-                justify-content: center;
-            }
-            /* Ajoute un espace sous la carte ransomware */
+        :root {
+            --main-color: {{ main_color|safe }};
+            --main-light: {{ main_light|safe }};
+            --main-dark: {{ main_dark|safe }};
+            --bg-color: {{ bg_color|safe }};
+            --card-color: {{ card_color|safe }};
+            --text-color: {{ text_color|safe }};
+            --main-gradient: {{ gradient|safe }};
+        }
+        body {
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Montserrat', Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+        }
+        /* Harmonise l'espace au-dessus et en dessous de la barre de recherche Google */
+        .google-search-bar-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
+            display: flex;
+            justify-content: center;
+        }
+        /* Ajoute un espace sous la carte ransomware */
+        .ransomware-map-container {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            max-width: 1200px;
+            margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
+            background: #232320;
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+            border-radius: 16px;
+            min-height: 320px;
+            overflow: hidden;
+            border: 1.5px solid #232320;
+        }
+        /* Ajoute un espace sous le panneau victimes */
+        .victims-panel {
+            width: 35%;
+            min-width: 220px;
+            max-width: 400px;
+            background: #232320;
+            border-left: 1.5px solid #282926;
+            padding: 1.1em 0.7em 1.1em 1.1em;
+            overflow-y: auto;
+            height: 320px;
+            border-radius: 0 16px 16px 0;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 5;
+            margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
+        }
+        #ransom-map {
+            width: 100%;
+            height: 320px;
+            border-radius: 16px 0 0 16px;
+            margin: 0;
+            box-shadow: none;
+            background: #1e1f1d;
+        }
+        .dashboard-cards, .dashboard-main, .ransomware-map-container, .google-search-bar-container {
+            max-width: 95vw !important;
+            width: 95vw !important;
+            min-width: 90vw !important;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .dashboard-cards {
+            display: flex;
+            gap: 1em; /* réduit l'espacement */
+            margin: 2em auto 1.2em auto;
+            max-width: 95vw !important;
+            width: 95vw !important;
+            min-width: 90vw !important;
+            border-bottom: 2px solid #232320;
+            justify-content: center; /* Ajout pour centrer les tuiles */
+        }
+        .dash-card {
+            flex: 1 1 140px;
+            min-width: 140px;
+            max-width: 180px;
+            background: #232320;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+            padding: 0.8em 0.8em 0.7em 0.8em;
+            display: flex;
+            align-items: center;
+            gap: 0.7em;
+            transition: transform 0.13s, box-shadow 0.13s;
+            cursor: pointer;
+        }
+        .dash-card:hover {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 6px 24px rgba(230,58,48,0.18);
+            background: #262726;
+        }
+        .dash-icon {
+            font-size: 1.7em;
+            width: 36px;
+            height: 36px;
+            color: #e63a30;
+            background: #1e1f1d;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.10);
+        }
+        .dash-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2em;
+        }
+        .dash-label {
+            font-size: 0.93em;
+            color: #bdbdb7;
+            font-weight: 600;
+        }
+        .dash-value {
+            font-size: 1.18em;
+            font-weight: 700;
+            color: #f7f6f1;
+        }
+        .dashboard-main {
+            display: flex;
+            gap: 2em;
+            /* max-width: 1200px; */
+            /* width: 100%; */
+            margin: 0 auto 2em auto;
+            align-items: flex-start;
+            width: 100%;
+        }
+        .dashboard-left, .dashboard-right {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5em;
+        }
+        .dashboard-left {
+            flex: 1.5 1 0;
+            min-width: 340px;
+        }
+        .dashboard-center {
+            flex: 1 1 0;
+            min-width: 260px;
+            max-width: 400px;
+        }
+        .dashboard-right {
+            flex: 1.2 1 0;
+            min-width: 340px;
+        }
+        .card {
+            background: #232320;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+            padding: 1.2em 1em 1em 1em;
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1em;
+            min-height: 0;
+        }
+        .card-title {
+            color: #e63a30;
+            font-size: 1.13em;
+            font-weight: 700;
+            margin-bottom: 0.3em;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            border-bottom: 2px solid #e63a30;
+            padding-bottom: 0.2em;
+            margin-bottom: 0.7em;
+            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
+        }
+        .shortcuts-title {
+            color: #e63a30;
+            font-size: 1.13em;
+            font-weight: 700;
+            margin-bottom: 0.3em;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            border-bottom: 2px solid #e63a30;
+            padding-bottom: 0.2em;
+            margin-bottom: 0.7em;
+            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
+            cursor: pointer;
+        }
+        .card-content-scroll {
+            overflow-y: auto;
+            max-height: 340px;
+            padding-right: 0.5em;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 8px; background: #181a1b;}
+        ::-webkit-scrollbar-thumb { background: #2e2e2b; border-radius: 6px;}
+        .markets-row {
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+        .market-card {
+            background: #232320;
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
+            padding: 1em 1em 1em 1em;
+            min-width: 180px;
+            max-width: 220px;
+            flex: 1 1 180px;
+            margin-bottom: 0.5em;
+            transition: box-shadow 0.13s, background 0.13s, transform 0.13s;
+            cursor: pointer;
+        }
+        .market-card:hover {
+            box-shadow: 0 4px 18px rgba(230,58,48,0.13);
+            background: #282926;
+            transform: translateY(-2px) scale(1.02);
+        }
+        .market-symbol {
+            font-weight: 600;
+            color: #e63a30;
+            font-size: 1.05em;
+        }
+        .market-price {
+            color: var(--text-color);
+            font-size: 1.15em;
+            font-weight: 700;
+            margin-bottom: 0.3em;
+        }
+        .market-currency {
+            color: #bdbdb7;
+            font-size: 0.98em;
+            margin-left: 0.5em;
+        }
+        .market-chart {
+            width: 100% !important;
+            height: 80px !important;
+            min-width: 120px;
+            max-width: 100%;
+            display: block;
+        }
+        /* News & CVE */
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .news-list li, .cve-list li {
+            margin-bottom: 1.2em;
+            background: #232320;
+            border-radius: 8px;
+            padding: 0.7em 0.7em 0.7em 0.9em;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
+            border-left: 4px solid #e63a30;
+            transition: background 0.13s, opacity 0.13s;
+        }
+        .news-list li:hover, .cve-list li:hover {
+            background: #282926;
+        }
+        .news-link,
+        .market-symbol,
+        .shortcut-icon {
+            color: var(--main-color);
+        }
+        .news-link {
+            text-decoration: none;
+            font-size: 1.09em;
+            font-weight: 600;
+            transition: color 0.13s;
+            word-break: break-word;
+        }
+        .news-link:hover {
+            color: #f7f6f1;
+            text-decoration: underline;
+        }
+        .meta {
+            margin-top: 0.5em;
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+        .badge,
+        .cve-score {
+            background: var(--main-color);
+            color: var(--text-color);
+            display: inline-block;
+            font-size: 0.93em;
+            font-weight: 600;
+            border-radius: 6px;
+            padding: 0.18em 0.7em;
+            margin-right: 0.5em;
+            letter-spacing: 0.5px;
+        }
+        .date,
+        .cve-date {
+            color: #bdbdb7;
+            font-size: 0.95em;
+            font-style: italic;
+        }
+        .cve-id {
+            font-weight: 600;
+            color: #e63a30;
+            font-size: 1em;
+        }
+        .cve-score {
+            background: #e63a30;
+            color: #f7f6f1;
+            border-radius: 6px;
+            font-size: 0.93em;
+            font-weight: 600;
+            padding: 0.13em 0.6em;
+            margin-left: 0.5em;
+        }
+        .cve-date {
+            color: #bdbdb7;
+            font-size: 0.95em;
+            font-style: italic;
+            margin-left: 0.5em;
+        }
+        .cve-desc {
+            margin-top: 0.4em;
+            font-size: 0.97em;
+            color: #f7f6f1;
+        }
+        .cve-sort {
+            margin-bottom: 0.7em;
+            display: flex;
+            align-items: center;
+            gap: 0.7em;
+        }
+        .cve-sort label {
+            color: #e63a30;
+            font-weight: 600;
+        }
+        .cve-sort select {
+            background: #1e1f1d;
+            color: #f7f6f1;
+            border: 1px solid #e63a30;
+            border-radius: 4px;
+            padding: 0.2em 0.7em;
+            font-size: 1em;
+        }
+        /* Recherche news */
+        .news-search-bar {
+            margin-bottom: 1em;
+            display: flex;
+            align-items: center;
+            gap: 0.7em;
+        }
+        .news-search-bar input[type="text"] {
+            background: #1e1f1d;
+            color: #f7f6f1;
+            border: 1px solid #e63a30;
+            border-radius: 4px;
+            padding: 0.4em 1em;
+            font-size: 1em;
+            width: 100%;
+            max-width: 320px;
+        }
+        .news-search-bar input[type="text"]:focus {
+            outline: 2px solid #e63a30;
+            background: #232320;
+            box-shadow: 0 0 0 2px #e63a3033;
+        }
+        .news-search-bar i {
+            color: #e63a30;
+            font-size: 1.1em;
+        }
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(24,26,27,0.93);
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.18s;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: #232320;
+            border-radius: 18px;
+            box-shadow: 0 8px 48px rgba(30,31,29,0.23);
+            width: 80vw;
+            max-width: 900px;
+            max-height: 80vh;
+            min-height: 320px;
+            overflow-y: auto;
+            padding: 2.2em 2em 1.5em 2em;
+            position: relative;
+            color: #f7f6f1;
+            animation: modalIn 0.18s;
+        }
+        @keyframes modalIn {
+            from { transform: scale(0.97) translateY(30px); opacity: 0.2;}
+            to { transform: scale(1) translateY(0); opacity: 1;}
+        }
+        .modal-close-btn {
+            position: absolute;
+            top: 1.1em; right: 1.3em;
+            background: none;
+            border: none;
+            color: #e63a30;
+            font-size: 2em;
+            cursor: pointer;
+            z-index: 10;
+            transition: color 0.13s;
+        }
+        .modal-close-btn:hover {
+            color: #f7f6f1;
+        }
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #e63a30;
+            margin-bottom: 1em;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+        .modal-section {
+            margin-bottom: 1.5em;
+        }
+        .modal-section:last-child {
+            margin-bottom: 0;
+        }
+        /* Pour améliorer la lisibilité dans la modal */
+        .modal-content ul, .modal-content .markets-row {
+            max-height: 48vh;
+            overflow-y: auto;
+        }
+        .modal-content .market-card {
+            max-width: 340px;
+            min-width: 220px;
+            font-size: 1.08em;
+        }
+        .modal-content .news-list li, .modal-content .cve-list li {
+            font-size: 1.13em;
+        }
+        .modal-content .victims-list .victim-item {
+            font-size: 1.13em;
+        }
+        @media (max-width: 700px) {
+            .modal-content { width: 98vw; padding: 1.1em 0.5em;}
+        }
+        /* Nouvelle carte ransomware harmonisée */
+        .ransomware-map-container {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            max-width: 1200px;
+            margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
+            background: #232320;
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+            border-radius: 16px;
+            min-height: 320px;
+            overflow: hidden;
+            border: 1.5px solid #232320;
+        }
+        .ransomware-map-section {
+            width: 65%;
+            min-width: 0;
+            height: 320px;
+            border-radius: 16px 0 0 16px;
+            background: #232320;
+            position: relative;
+        }
+        #ransom-map {
+            width: 100%;
+            height: 320px;
+            border-radius: 16px 0 0 16px;
+            margin: 0;
+            box-shadow: none;
+            background: #1e1f1d;
+        }
+        .victims-panel {
+            width: 35%;
+            min-width: 220px;
+            max-width: 400px;
+            background: #232320;
+            border-left: 1.5px solid #282926;
+            padding: 1.1em 0.7em 1.1em 1.1em;
+            overflow-y: auto;
+            height: 320px;
+            border-radius: 0 16px 16px 0;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 5;
+            margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
+        }
+        .victims-panel-title {
+            color: #e63a30;
+            font-size: 1.13em;
+            font-weight: 700;
+            margin-bottom: 0.7em;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            border-bottom: 2px solid #e63a30;
+            padding-bottom: 0.2em;
+            margin-bottom: 0.7em;
+            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
+        }
+        .victims-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex: 1 1 0;
+            overflow-y: auto;
+        }
+        .victim-item {
+            background: #232320;
+            border-radius: 8px;
+            padding: 0.5em 0.7em;
+            margin-bottom: 0.5em;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
+            border-left: 4px solid #e63a30;
+            cursor: pointer;
+            transition: background 0.13s, opacity 0.13s, border-left 0.13s;
+        }
+        .victim-item:hover, .victim-item.active {
+            background: #282926;
+            border-left: 6px solid #f7f6f1;
+        }
+        .victim-title {
+            font-weight: 600;
+            color: #e63a30;
+        }
+        .victim-group {
+            color: #bdbdb7;
+            font-size: 0.97em;
+            margin-left: 0.5em;
+        }
+        .victim-country {
+            color: #bdbdb7;
+            font-size: 0.97em;
+            margin-left: 0.5em;
+        }
+        .victim-date {
+            color: #bdbdb7;
+            font-size: 0.95em;
+            font-style: italic;
+            margin-left: 0.5em;
+        }
+        /* Carte Leaflet custom */
+        .leaflet-container {
+            background: #1e1f1d !important;
+            border-radius: 16px 0 0 16px;
+            font-family: 'Montserrat', Arial, sans-serif;
+        }
+        .leaflet-popup-content-wrapper, .leaflet-tooltip {
+            background: var(--card-color) !important;
+            color: var(--text-color) !important;
+            border: 1.5px solid var(--main-color) !important;
+            border-radius: 10px !important;
+            font-size: 1em;
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+        }
+        .leaflet-popup-tip, .leaflet-tooltip-tip {
+            background: var(--main-color) !important;
+        }
+        /* Pulse animation pour marker actif */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(230,58,48,0.5);}
+            70% { box-shadow: 0 0 0 12px rgba(230,58,48,0);}
+            100% { box-shadow: 0 0 0 0 rgba(230,58,48,0);}
+        }
+        .leaflet-interactive.pulse {
+            animation: pulse 1.2s infinite;
+            stroke: #f7f6f1 !important;
+            stroke-width: 3 !important;
+        }
+        /* Responsive */
+        @media (max-width: 900px) {
             .ransomware-map-container {
-                display: flex;
-                flex-direction: row;
-                width: 100%;
-                max-width: 1200px;
-                margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
-                background: #232320;
-                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+                flex-direction: column;
+                min-height: 0;
                 border-radius: 16px;
-                min-height: 320px;
-                overflow: hidden;
-                border: 1.5px solid #232320;
+                width: 98vw !important;
+                max-width: 98vw !important;
             }
-            /* Ajoute un espace sous le panneau victimes */
-            .victims-panel {
-                width: 35%;
-                min-width: 220px;
-                max-width: 400px;
-                background: #232320;
-                border-left: 1.5px solid #282926;
-                padding: 1.1em 0.7em 1.1em 1.1em;
-                overflow-y: auto;
-                height: 320px;
-                border-radius: 0 16px 16px 0;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                position: relative;
-                z-index: 5;
-                margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
-            }
-            #ransom-map {
+            .ransomware-map-section, #ransom-map {
                 width: 100%;
-                height: 320px;
-                border-radius: 16px 0 0 16px;
-                margin: 0;
-                box-shadow: none;
-                background: #1e1f1d;
+                height: 220px;
+                border-radius: 16px 16px 0 0;
             }
-            .dashboard-cards, .dashboard-main, .ransomware-map-container, .google-search-bar-container {
-                max-width: 95vw !important;
-                width: 95vw !important;
-                min-width: 90vw !important;
-                margin-left: auto;
-                margin-right: auto;
+            .victims-panel {
+                width: 100%;
+                max-width: none;
+                border-radius: 0 0 16px 16px;
+                border-left: none;
+                border-top: 1.5px solid #282926;
+                height: 180px;
             }
-            .dashboard-cards {
-                display: flex;
-                gap: 1em; /* réduit l'espacement */
-                margin: 2em auto 1.2em auto;
-                max-width: 95vw !important;
-                width: 95vw !important;
-                min-width: 90vw !important;
-                border-bottom: 2px solid #232320;
-                justify-content: center; /* Ajout pour centrer les tuiles */
-            }
-            .dash-card {
-                flex: 1 1 140px;
-                min-width: 140px;
-                max-width: 180px;
-                background: #232320;
-                border-radius: 12px;
-                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-                padding: 0.8em 0.8em 0.7em 0.8em;
-                display: flex;
-                align-items: center;
-                gap: 0.7em;
-                transition: transform 0.13s, box-shadow 0.13s;
-                cursor: pointer;
-            }
-            .dash-card:hover {
-                transform: translateY(-4px) scale(1.03);
-                box-shadow: 0 6px 24px rgba(230,58,48,0.18);
-                background: #262726;
-            }
-            .dash-icon {
-                font-size: 1.7em;
-                width: 36px;
-                height: 36px;
-                color: #e63a30;
-                background: #1e1f1d;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 1px 4px rgba(30,31,29,0.10);
-            }
-            .dash-info {
-                display: flex;
-                flex-direction: column;
-                gap: 0.2em;
-            }
-            .dash-label {
-                font-size: 0.93em;
-                color: #bdbdb7;
-                font-weight: 600;
-            }
-            .dash-value {
-                font-size: 1.18em;
-                font-weight: 700;
-                color: #f7f6f1;
-            }
+        }
+        /* Carte raccourcis personnalisés */
+        .shortcuts-card {
+            background: #232320;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+            padding: 1.2em 1em 1em 1em;
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1em;
+            min-height: 0;
+            align-items: flex-start;
+        }
+        .shortcuts-title {
+            color: #e63a30;
+            font-size: 1.13em;
+            font-weight: 700;
+            margin-bottom: 0.3em;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            border-bottom: 2px solid #e63a30;
+            padding-bottom: 0.2em;
+            margin-bottom: 0.7em;
+            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
+            cursor: pointer;
+        }
+        .shortcuts-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7em;
+        }
+        .shortcut-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            background: #282926;
+            border-radius: 8px;
+            padding: 0.5em 0.9em;
+            color: #f7f6f1;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.05em;
+            transition: background 0.13s, color 0.13s, box-shadow 0.13s;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
+        }
+        .shortcut-item:hover {
+            background: #e63a30;
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(230,58,48,0.13);
+        }
+        .shortcut-icon {
+            font-size: 1.3em;
+            min-width: 1.3em;
+            color: #e63a30;
+        }
+        .shortcut-item:hover .shortcut-icon {
+            color: #fff;
+        }
+        /* Barre de recherche Google */
+        .google-search-bar-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
+            display: flex;
+            justify-content: center;
+        }
+        .google-search-bar {
+            display: flex;
+            align-items: center;
+            background: #232320;
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
+            padding: 0.5em 1em;
+            width: 100%;
+            max-width: 480px;
+            border: 1.5px solid #e63a30;
+            gap: 0.7em;
+        }
+        .google-search-bar input[type="text"] {
+            background: transparent;
+            color: #f7f6f1;
+            border: none;
+            outline: none;
+            font-size: 1.1em;
+            width: 100%;
+            padding: 0.3em 0.2em;
+        }
+        .google-search-bar i {
+            color: #e63a30;
+            font-size: 1.2em;
+        }
+        /* Responsive pour la colonne centrale */
+        @media (max-width: 1200px) {
             .dashboard-main {
-                display: flex;
-                gap: 2em;
-                /* max-width: 1200px; */
-                /* width: 100%; */
-                margin: 0 auto 2em auto;
-                align-items: flex-start;
-                width: 100%;
-            }
-            .dashboard-left, .dashboard-right {
-                display: flex;
                 flex-direction: column;
-                gap: 0.5em;
             }
-            .dashboard-left {
-                flex: 1.5 1 0;
-                min-width: 340px;
-            }
-            .dashboard-center {
-                flex: 1 1 0;
-                min-width: 260px;
-                max-width: 400px;
-            }
-            .dashboard-right {
-                flex: 1.2 1 0;
-                min-width: 340px;
-            }
-            .card {
-                background: #232320;
-                border-radius: 14px;
-                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-                padding: 1.2em 1em 1em 1em;
-                margin-bottom: 0;
-                display: flex;
-                flex-direction: column;
-                gap: 1em;
-                min-height: 0;
-            }
-            .card-title {
-                color: #e63a30;
-                font-size: 1.13em;
-                font-weight: 700;
-                margin-bottom: 0.3em;
-                letter-spacing: 0.5px;
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-                border-bottom: 2px solid #e63a30;
-                padding-bottom: 0.2em;
-                margin-bottom: 0.7em;
-                background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
-            }
-            .shortcuts-title {
-                color: #e63a30;
-                font-size: 1.13em;
-                font-weight: 700;
-                margin-bottom: 0.3em;
-                letter-spacing: 0.5px;
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-                border-bottom: 2px solid #e63a30;
-                padding-bottom: 0.2em;
-                margin-bottom: 0.7em;
-                background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
-                cursor: pointer;
-            }
-            .card-content-scroll {
-                overflow-y: auto;
-                max-height: 340px;
-                padding-right: 0.5em;
-            }
-            /* Custom scrollbars */
-            ::-webkit-scrollbar { width: 8px; background: #181a1b;}
-            ::-webkit-scrollbar-thumb { background: #2e2e2b; border-radius: 6px;}
-            .markets-row {
-                display: flex;
-                gap: 1em;
-                flex-wrap: wrap;
-            }
-            .market-card {
-                background: #232320;
-                border-radius: 10px;
-                box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-                padding: 1em 1em 1em 1em;
-                min-width: 180px;
-                max-width: 220px;
-                flex: 1 1 180px;
-                margin-bottom: 0.5em;
-                transition: box-shadow 0.13s, background 0.13s, transform 0.13s;
-                cursor: pointer;
-            }
-            .market-card:hover {
-                box-shadow: 0 4px 18px rgba(230,58,48,0.13);
-                background: #282926;
-                transform: translateY(-2px) scale(1.02);
-            }
-            .market-symbol {
-                font-weight: 600;
-                color: #e63a30;
-                font-size: 1.05em;
-            }
-            .market-price {
-                font-size: 1.15em;
-                font-weight: 700;
-                color: #f7f6f1;
-                margin-bottom: 0.3em;
-            }
-            .market-currency {
-                color: #bdbdb7;
-                font-size: 0.98em;
-                margin-left: 0.5em;
-            }
-            .market-chart {
-                width: 100% !important;
-                height: 80px !important;
-                min-width: 120px;
-                max-width: 100%;
-                display: block;
-            }
-            /* News & CVE */
-            ul {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-            }
-            .news-list li, .cve-list li {
-                margin-bottom: 1.2em;
-                background: #232320;
-                border-radius: 8px;
-                padding: 0.7em 0.7em 0.7em 0.9em;
-                box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-                border-left: 4px solid #e63a30;
-                transition: background 0.13s, opacity 0.13s;
-            }
-            .news-list li:hover, .cve-list li:hover {
-                background: #282926;
-            }
-            .news-link {
-                color: #e63a30;
-                text-decoration: none;
-                font-size: 1.09em;
-                font-weight: 600;
-                transition: color 0.13s;
-                word-break: break-word;
-            }
-            .news-link:hover {
-                color: #f7f6f1;
-                text-decoration: underline;
-            }
-            .meta {
-                margin-top: 0.5em;
-                display: flex;
-                align-items: center;
-                gap: 1em;
-                flex-wrap: wrap;
-            }
-            .badge {
-                display: inline-block;
-                background: #e63a30;
-                color: #f7f6f1;
-                font-size: 0.93em;
-                font-weight: 600;
-                border-radius: 6px;
-                padding: 0.18em 0.7em;
-                margin-right: 0.5em;
-                letter-spacing: 0.5px;
-            }
-            .date {
-                color: #bdbdb7;
-                font-size: 0.98em;
-                font-style: italic;
-            }
-            .cve-id {
-                font-weight: 600;
-                color: #e63a30;
-                font-size: 1em;
-            }
-            .cve-score {
-                background: #e63a30;
-                color: #f7f6f1;
-                border-radius: 6px;
-                font-size: 0.93em;
-                font-weight: 600;
-                padding: 0.13em 0.6em;
-                margin-left: 0.5em;
-            }
-            .cve-date {
-                color: #bdbdb7;
-                font-size: 0.95em;
-                font-style: italic;
-                margin-left: 0.5em;
-            }
-            .cve-desc {
-                margin-top: 0.4em;
-                font-size: 0.97em;
-                color: #f7f6f1;
-            }
-            .cve-sort {
-                margin-bottom: 0.7em;
-                display: flex;
-                align-items: center;
-                gap: 0.7em;
-            }
-            .cve-sort label {
-                color: #e63a30;
-                font-weight: 600;
-            }
-            .cve-sort select {
-                background: #1e1f1d;
-                color: #f7f6f1;
-                border: 1px solid #e63a30;
-                border-radius: 4px;
-                padding: 0.2em 0.7em;
-                font-size: 1em;
-            }
-            /* Recherche news */
-            .news-search-bar {
-                margin-bottom: 1em;
-                display: flex;
-                align-items: center;
-                gap: 0.7em;
-            }
-            .news-search-bar input[type="text"] {
-                background: #1e1f1d;
-                color: #f7f6f1;
-                border: 1px solid #e63a30;
-                border-radius: 4px;
-                padding: 0.4em 1em;
-                font-size: 1em;
-                width: 100%;
-                max-width: 320px;
-            }
-            .news-search-bar input[type="text"]:focus {
-                outline: 2px solid #e63a30;
-                background: #232320;
-                box-shadow: 0 0 0 2px #e63a3033;
-            }
-            .news-search-bar i {
-                color: #e63a30;
-                font-size: 1.1em;
-            }
-            /* Modal styles */
-            .modal-overlay {
-                display: none;
-                position: fixed;
-                z-index: 1000;
-                left: 0; top: 0;
-                width: 100vw; height: 100vh;
-                background: rgba(24,26,27,0.93);
-                justify-content: center;
-                align-items: center;
-                transition: opacity 0.18s;
-            }
-            .modal-overlay.active {
-                display: flex;
-            }
-            .modal-content {
-                background: #232320;
-                border-radius: 18px;
-                box-shadow: 0 8px 48px rgba(30,31,29,0.23);
-                width: 80vw;
-                max-width: 900px;
-                max-height: 80vh;
-                min-height: 320px;
-                overflow-y: auto;
-                padding: 2.2em 2em 1.5em 2em;
-                position: relative;
-                color: #f7f6f1;
-                animation: modalIn 0.18s;
-            }
-            @keyframes modalIn {
-                from { transform: scale(0.97) translateY(30px); opacity: 0.2;}
-                to { transform: scale(1) translateY(0); opacity: 1;}
-            }
-            .modal-close-btn {
-                position: absolute;
-                top: 1.1em; right: 1.3em;
-                background: none;
-                border: none;
-                color: #e63a30;
-                font-size: 2em;
-                cursor: pointer;
-                z-index: 10;
-                transition: color 0.13s;
-            }
-            .modal-close-btn:hover {
-                color: #f7f6f1;
-            }
-            .modal-title {
-                font-size: 1.5em;
-                font-weight: 700;
-                color: #e63a30;
-                margin-bottom: 1em;
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-            }
-            .modal-section {
-                margin-bottom: 1.5em;
-            }
-            .modal-section:last-child {
-                margin-bottom: 0;
-            }
-            /* Pour améliorer la lisibilité dans la modal */
-            .modal-content ul, .modal-content .markets-row {
-                max-height: 48vh;
-                overflow-y: auto;
-            }
-            .modal-content .market-card {
-                max-width: 340px;
-                min-width: 220px;
-                font-size: 1.08em;
-            }
-            .modal-content .news-list li, .modal-content .cve-list li {
-                font-size: 1.13em;
-            }
-            .modal-content .victims-list .victim-item {
-                font-size: 1.13em;
-            }
-            @media (max-width: 700px) {
-                .modal-content { width: 98vw; padding: 1.1em 0.5em;}
-            }
-            /* Nouvelle carte ransomware harmonisée */
-            .ransomware-map-container {
-                display: flex;
-                flex-direction: row;
-                width: 100%;
-                max-width: 1200px;
-                margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
-                background: #232320;
-                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-                border-radius: 16px;
-                min-height: 320px;
-                overflow: hidden;
-                border: 1.5px solid #232320;
-            }
-            .ransomware-map-section {
-                width: 65%;
+            .dashboard-left, .dashboard-center, .dashboard-right {
                 min-width: 0;
-                height: 320px;
-                border-radius: 16px 0 0 16px;
-                background: #232320;
-                position: relative;
-            }
-            #ransom-map {
                 width: 100%;
-                height: 320px;
-                border-radius: 16px 0 0 16px;
-                margin: 0;
-                box-shadow: none;
-                background: #1e1f1d;
             }
-            .victims-panel {
-                width: 35%;
-                min-width: 220px;
-                max-width: 400px;
-                background: #232320;
-                border-left: 1.5px solid #282926;
-                padding: 1.1em 0.7em 1.1em 1.1em;
-                overflow-y: auto;
-                height: 320px;
-                border-radius: 0 16px 16px 0;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                position: relative;
-                z-index: 5;
-                margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
-            }
-            .victims-panel-title {
-                color: #e63a30;
-                font-size: 1.13em;
-                font-weight: 700;
-                margin-bottom: 0.7em;
-                letter-spacing: 0.5px;
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-                border-bottom: 2px solid #e63a30;
-                padding-bottom: 0.2em;
-                margin-bottom: 0.7em;
-                background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
-            }
-            .victims-list {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-                flex: 1 1 0;
-                overflow-y: auto;
-            }
-            .victim-item {
-                background: #232320;
-                border-radius: 8px;
-                padding: 0.5em 0.7em;
-                margin-bottom: 0.5em;
-                box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-                border-left: 4px solid #e63a30;
-                cursor: pointer;
-                transition: background 0.13s, opacity 0.13s, border-left 0.13s;
-            }
-            .victim-item:hover, .victim-item.active {
-                background: #282926;
-                border-left: 6px solid #f7f6f1;
-            }
-            .victim-title {
-                font-weight: 600;
-                color: #e63a30;
-            }
-            .victim-group {
-                color: #bdbdb7;
-                font-size: 0.97em;
-                margin-left: 0.5em;
-            }
-            .victim-country {
-                color: #bdbdb7;
-                font-size: 0.97em;
-                margin-left: 0.5em;
-            }
-            .victim-date {
-                color: #bdbdb7;
-                font-size: 0.95em;
-                font-style: italic;
-                margin-left: 0.5em;
-            }
-            /* Carte Leaflet custom */
-            .leaflet-container {
-                background: #1e1f1d !important;
-                border-radius: 16px 0 0 16px;
-                font-family: 'Montserrat', Arial, sans-serif;
-            }
-            .leaflet-popup-content-wrapper, .leaflet-tooltip {
-                background: #232320 !important;
-                color: #f7f6f1 !important;
-                border-radius: 10px !important;
-                border: 1.5px solid #e63a30 !important;
-                font-size: 1em;
-                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-            }
-            .leaflet-popup-tip, .leaflet-tooltip-tip {
-                background: #e63a30 !important;
-            }
-            /* Pulse animation pour marker actif */
-            @keyframes pulse {
-                0% { box-shadow: 0 0 0 0 rgba(230,58,48,0.5);}
-                70% { box-shadow: 0 0 0 12px rgba(230,58,48,0);}
-                100% { box-shadow: 0 0 0 0 rgba(230,58,48,0);}
-            }
-            .leaflet-interactive.pulse {
-                animation: pulse 1.2s infinite;
-                stroke: #f7f6f1 !important;
-                stroke-width: 3 !important;
-            }
-            /* Responsive */
-            @media (max-width: 900px) {
-                .ransomware-map-container {
-                    flex-direction: column;
-                    min-height: 0;
-                    border-radius: 16px;
-                    width: 98vw !important;
-                    max-width: 98vw !important;
-                }
-                .ransomware-map-section, #ransom-map {
-                    width: 100%;
-                    height: 220px;
-                    border-radius: 16px 16px 0 0;
-                }
-                .victims-panel {
-                    width: 100%;
-                    max-width: none;
-                    border-radius: 0 0 16px 16px;
-                    border-left: none;
-                    border-top: 1.5px solid #282926;
-                    height: 180px;
-                }
-            }
-            /* Carte raccourcis personnalisés */
-            .shortcuts-card {
-                background: #232320;
-                border-radius: 14px;
-                box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-                padding: 1.2em 1em 1em 1em;
-                margin-bottom: 0;
-                display: flex;
-                flex-direction: column;
-                gap: 1em;
-                min-height: 0;
-                align-items: flex-start;
-            }
-            .shortcuts-title {
-                color: #e63a30;
-                font-size: 1.13em;
-                font-weight: 700;
-                margin-bottom: 0.3em;
-                letter-spacing: 0.5px;
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-                border-bottom: 2px solid #e63a30;
-                padding-bottom: 0.2em;
-                margin-bottom: 0.7em;
-                background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
-                cursor: pointer;
-            }
-            .shortcuts-list {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.7em;
-            }
-            .shortcut-item {
-                display: flex;
-                align-items: center;
-                gap: 0.5em;
-                background: #282926;
-                border-radius: 8px;
-                padding: 0.5em 0.9em;
-                color: #f7f6f1;
-                text-decoration: none;
-                font-weight: 600;
-                font-size: 1.05em;
-                transition: background 0.13s, color 0.13s, box-shadow 0.13s;
-                box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-            }
-            .shortcut-item:hover {
-                background: #e63a30;
-                color: #fff;
-                box-shadow: 0 2px 12px rgba(230,58,48,0.13);
-            }
-            .shortcut-icon {
-                font-size: 1.3em;
-                min-width: 1.3em;
-                color: #e63a30;
-            }
-            .shortcut-item:hover .shortcut-icon {
-                color: #fff;
-            }
-            /* Barre de recherche Google */
-            .google-search-bar-container {
-                width: 100%;
-                max-width: 1200px;
-                margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
-                display: flex;
-                justify-content: center;
-            }
-            .google-search-bar {
-                display: flex;
-                align-items: center;
-                background: #232320;
-                border-radius: 10px;
-                box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-                padding: 0.5em 1em;
-                width: 100%;
-                max-width: 480px;
-                border: 1.5px solid #e63a30;
-                gap: 0.7em;
-            }
-            .google-search-bar input[type="text"] {
-                background: transparent;
-                color: #f7f6f1;
-                border: none;
-                outline: none;
-                font-size: 1.1em;
-                width: 100%;
-                padding: 0.3em 0.2em;
-            }
-            .google-search-bar i {
-                color: #e63a30;
-                font-size: 1.2em;
-            }
-            /* Responsive pour la colonne centrale */
-            @media (max-width: 1200px) {
-                .dashboard-main {
-                    flex-direction: column;
-                }
-                .dashboard-left, .dashboard-center, .dashboard-right {
-                    min-width: 0;
-                    width: 100%;
-                }
-            }
-            /* Ajout du footer */
-            .footer-madeby {
-                width: 100vw;
-                text-align: center;
-                color: #bdbdb7;
-                font-size: 1em;
-                margin: 2.5em 0 0.5em 0;
-                letter-spacing: 0.5px;
-                font-family: 'Montserrat', Arial, sans-serif;
-                opacity: 0.85;
-            }
-            .footer-madeby .heart {
-                color: #e63a30;
-                font-size: 1.1em;
-                vertical-align: middle;
-            }
-            /* Ajout style pour le bouton de tri actualités */
-            .news-sort-btn {
-                background: none;
-                border: none;
-                color: #e63a30;
-                font-size: 1.25em;
-                cursor: pointer;
-                margin-left: 0.3em;
-                transition: color 0.13s;
-                display: flex;
-                align-items: center;
-                padding: 0 0.2em;
-            }
-            .news-sort-btn:hover {
-                color: #f7f6f1;
-            }
-            .news-sort-btn:focus {
-                outline: 2px solid #e63a30;
-            }
+        }
+        /* Ajout du footer */
+        .footer-madeby {
+            width: 100vw;
+            text-align: center;
+            color: #bdbdb7;
+            font-size: 1em;
+            margin: 2.5em 0 0.5em 0;
+            letter-spacing: 0.5px;
+            font-family: 'Montserrat', Arial, sans-serif;
+            opacity: 0.85;
+        }
+        .footer-madeby .heart {
+            color: #e63a30;
+            font-size: 1.1em;
+            vertical-align: middle;
+        }
+        /* Ajout style pour le bouton de tri actualités */
+        .news-sort-btn {
+            background: none;
+            border: none;
+            color: #e63a30;
+            font-size: 1.25em;
+            cursor: pointer;
+            margin-left: 0.3em;
+            transition: color 0.13s;
+            display: flex;
+            align-items: center;
+            padding: 0 0.2em;
+        }
+        .news-sort-btn:hover {
+            color: #f7f6f1;
+        }
+        .news-sort-btn:focus {
+            outline: 2px solid #e63a30;
+        }
         </style>
         <script>
             // Données initiales côté client
@@ -1769,15 +1979,33 @@ def index():
     """
     return render_template_string(
         html,
-        news=news_cache,
+        news=news,
         cves=cves,
         ransomware=ransomware,
         markets=markets,
         shortcuts=shortcuts,
+        main_color=main_color,
+        main_light=main_light,
+        main_dark=main_dark,
+        bg_color=bg_color,
+        card_color=card_color,
+        text_color=text_color,
+        gradient=gradient,
     )
 
 
 if __name__ == "__main__":
-    Thread(target=background_fetch, daemon=True).start()
-    fetch_news()
+    # S'assurer que les répertoires existent
+    ensure_dirs()
+    ensure_cache_dir()
+    Thread(target=background_refresh, daemon=True).start()
+    # Initial fetch to populate cache if vide
+    for key, func in [
+        ("news", fetch_news),
+        ("cves", fetch_cves),
+        ("ransomware", fetch_ransomware),
+        ("markets", fetch_market_data),
+    ]:
+        if not cache_is_fresh(CACHE_FILES[key], load_config()):
+            save_cache(CACHE_FILES[key], func())
     app.run(host="0.0.0.0", port=5000)
