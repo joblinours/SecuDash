@@ -1,0 +1,9 @@
+{
+    "refresh_minutes": 60,
+    "colors": {
+        "main": "#e63a30",
+        "bg": "#181a1b",
+        "card": "#232320",
+        "text": "#f7f6f1"
+    }
+}
