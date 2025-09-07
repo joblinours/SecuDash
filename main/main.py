@@ -534,373 +534,423 @@ def index():
             --card-color: {{ card_color|safe }};
             --text-color: {{ text_color|safe }};
             --main-gradient: {{ gradient|safe }};
+            
+            /* Variables dynamiques basées sur la viewport */
+            --base-font-size: clamp(14px, 1.5vw, 22px);
+            --spacing-xs: clamp(0.25rem, 0.5vw, 0.75rem);
+            --spacing-sm: clamp(0.5rem, 1vw, 1.5rem);
+            --spacing-md: clamp(1rem, 2vw, 3rem);
+            --spacing-lg: clamp(1.5rem, 3vw, 4.5rem);
+            --border-radius-sm: clamp(6px, 0.8vw, 12px);
+            --border-radius-md: clamp(10px, 1.2vw, 18px);
+            --border-radius-lg: clamp(14px, 1.6vw, 24px);
         }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             background: var(--bg-color);
             color: var(--text-color);
             font-family: 'Montserrat', Arial, sans-serif;
+            font-size: var(--base-font-size);
             margin: 0;
-            min-height: 100vh;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            grid-gap: var(--spacing-xs);
         }
-        /* Harmonise l'espace au-dessus et en dessous de la barre de recherche Google */
+        
+        /* Barre de recherche Google - Premier élément de la grille */
         .google-search-bar-container {
             width: 100%;
-            max-width: 1200px;
-            margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
+            padding: var(--spacing-xs) var(--spacing-sm);
             display: flex;
             justify-content: center;
+            align-items: center;
+            grid-area: 1 / 1;
         }
-        /* Ajoute un espace sous la carte ransomware */
-        .ransomware-map-container {
+        
+        .google-search-bar {
             display: flex;
-            flex-direction: row;
-            width: 100%;
-            max-width: 1200px;
-            margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
-            background: #232320;
+            align-items: center;
+            background: var(--card-color);
+            border-radius: var(--border-radius-md);
             box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-            border-radius: 16px;
-            min-height: 320px;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            width: clamp(300px, 50vw, 600px);
+            border: 2px solid var(--main-color);
+            gap: var(--spacing-xs);
+        }
+        
+        .google-search-bar input[type="text"] {
+            background: transparent;
+            color: var(--text-color);
+            border: none;
+            outline: none;
+            font-size: clamp(14px, 1.2vw, 18px);
+            width: 100%;
+            padding: var(--spacing-xs);
+        }
+        
+        .google-search-bar i {
+            color: var(--main-color);
+            font-size: clamp(16px, 1.5vw, 20px);
+        }
+        
+        /* Carte ransomware - Deuxième élément de la grille */
+        .ransomware-map-container {
+            width: 95vw;
+            max-width: 95vw;
+            margin: 0 auto;
+            background: var(--card-color);
+            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
+            border-radius: var(--border-radius-lg);
+            height: clamp(250px, 25vh, 400px);
             overflow: hidden;
-            border: 1.5px solid #232320;
+            border: 2px solid var(--card-color);
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            grid-area: 2 / 1;
         }
-        /* Ajoute un espace sous le panneau victimes */
-        .victims-panel {
-            width: 35%;
-            min-width: 220px;
-            max-width: 400px;
-            background: #232320;
-            border-left: 1.5px solid #282926;
-            padding: 1.1em 0.7em 1.1em 1.1em;
-            overflow-y: auto;
-            height: 320px;
-            border-radius: 0 16px 16px 0;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
+        
+        .ransomware-map-section {
+            background: var(--card-color);
             position: relative;
-            z-index: 5;
-            margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
+            overflow: hidden;
         }
+        
         #ransom-map {
             width: 100%;
-            height: 320px;
-            border-radius: 16px 0 0 16px;
+            height: 100%;
+            border-radius: var(--border-radius-lg) 0 0 var(--border-radius-lg);
             margin: 0;
             box-shadow: none;
             background: #1e1f1d;
         }
-        .dashboard-cards, .dashboard-main, .ransomware-map-container, .google-search-bar-container {
-            max-width: 95vw !important;
-            width: 95vw !important;
-            min-width: 90vw !important;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .dashboard-cards {
-            display: flex;
-            gap: 1em; /* réduit l'espacement */
-            margin: 2em auto 1.2em auto;
-            max-width: 95vw !important;
-            width: 95vw !important;
-            min-width: 90vw !important;
-            border-bottom: 2px solid #232320;
-            justify-content: center; /* Ajout pour centrer les tuiles */
-        }
-        .dash-card {
-            flex: 1 1 140px;
-            min-width: 140px;
-            max-width: 180px;
-            background: #232320;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-            padding: 0.8em 0.8em 0.7em 0.8em;
-            display: flex;
-            align-items: center;
-            gap: 0.7em;
-            transition: transform 0.13s, box-shadow 0.13s;
-            cursor: pointer;
-        }
-        .dash-card:hover {
-            transform: translateY(-4px) scale(1.03);
-            box-shadow: 0 6px 24px rgba(230,58,48,0.18);
-            background: #262726;
-        }
-        .dash-icon {
-            font-size: 1.7em;
-            width: 36px;
-            height: 36px;
-            color: #e63a30;
-            background: #1e1f1d;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 1px 4px rgba(30,31,29,0.10);
-        }
-        .dash-info {
+        
+        .victims-panel {
+            background: var(--card-color);
+            border-left: 2px solid #282926;
+            padding: var(--spacing-sm);
+            overflow-y: auto;
+            border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
             display: flex;
             flex-direction: column;
-            gap: 0.2em;
         }
-        .dash-label {
-            font-size: 0.93em;
-            color: #bdbdb7;
-            font-weight: 600;
-        }
-        .dash-value {
-            font-size: 1.18em;
-            font-weight: 700;
-            color: #f7f6f1;
-        }
+        
+        /* Contenu principal - Troisième élément de la grille */
         .dashboard-main {
-            display: flex;
-            gap: 2em;
-            /* max-width: 1200px; */
-            /* width: 100%; */
-            margin: 0 auto 2em auto;
-            align-items: flex-start;
-            width: 100%;
+            width: 95vw;
+            max-width: 95vw;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr clamp(200px, 25vw, 350px) 1fr;
+            gap: var(--spacing-sm);
+            height: 100%;
+            overflow: hidden;
+            padding: 0 var(--spacing-xs);
+            grid-area: 3 / 1;
         }
-        .dashboard-left, .dashboard-right {
+        
+        /* Colonnes du dashboard principal */
+        .dashboard-left, .dashboard-center, .dashboard-right {
             display: flex;
             flex-direction: column;
-            gap: 0.5em;
+            gap: var(--spacing-xs);
+            height: 100%;
+            overflow: hidden;
         }
-        .dashboard-left {
-            flex: 1.5 1 0;
-            min-width: 340px;
-        }
-        .dashboard-center {
-            flex: 1 1 0;
-            min-width: 260px;
-            max-width: 400px;
-        }
-        .dashboard-right {
-            flex: 1.2 1 0;
-            min-width: 340px;
-        }
-        .card {
-            background: #232320;
-            border-radius: 14px;
+        
+        /* Cartes principales */
+        .card, .shortcuts-card {
+            background: var(--card-color);
+            border-radius: var(--border-radius-lg);
             box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-            padding: 1.2em 1em 1em 1em;
-            margin-bottom: 0;
+            padding: var(--spacing-sm);
             display: flex;
             flex-direction: column;
-            gap: 1em;
+            gap: var(--spacing-sm);
+            flex: 1;
+            overflow: hidden;
             min-height: 0;
         }
-        .card-title {
-            color: #e63a30;
-            font-size: 1.13em;
-            font-weight: 700;
-            margin-bottom: 0.3em;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 0.5em;
-            border-bottom: 2px solid #e63a30;
-            padding-bottom: 0.2em;
-            margin-bottom: 0.7em;
-            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
+        
+        /* Spécialisation pour la carte raccourcis */
+        .shortcuts-card {
+            gap: var(--spacing-xs); /* Réduction de l'espace entre titre et liste */
         }
-        .shortcuts-title {
-            color: #e63a30;
-            font-size: 1.13em;
+        
+        .card-title, .shortcuts-title, .victims-panel-title {
+            color: var(--main-color);
+            font-size: clamp(1rem, 1.3vw, 1.5rem);
             font-weight: 700;
-            margin-bottom: 0.3em;
-            letter-spacing: 0.5px;
             display: flex;
             align-items: center;
-            gap: 0.5em;
-            border-bottom: 2px solid #e63a30;
-            padding-bottom: 0.2em;
-            margin-bottom: 0.7em;
-            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
+            gap: var(--spacing-xs);
+            border-bottom: 2px solid var(--main-color);
+            padding-bottom: var(--spacing-xs);
+            margin-bottom: var(--spacing-xs);
+            background: var(--main-gradient);
             cursor: pointer;
+            flex-shrink: 0;
         }
+        
         .card-content-scroll {
             overflow-y: auto;
-            max-height: 340px;
-            padding-right: 0.5em;
+            flex: 1;
+            padding-right: var(--spacing-xs);
         }
-        /* Custom scrollbars */
-        ::-webkit-scrollbar { width: 8px; background: #181a1b;}
-        ::-webkit-scrollbar-thumb { background: #2e2e2b; border-radius: 6px;}
+        
+        /* Scrollbars personnalisées */
+        ::-webkit-scrollbar { 
+            width: clamp(6px, 0.5vw, 10px); 
+            background: var(--bg-color);
+        }
+        ::-webkit-scrollbar-thumb { 
+            background: #2e2e2b; 
+            border-radius: var(--border-radius-sm);
+        }
+        
+        /* Marchés */
         .markets-row {
-            display: flex;
-            gap: 1em;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(clamp(160px, 15vw, 220px), 1fr));
+            gap: var(--spacing-sm);
+            width: 100%;
         }
+        
         .market-card {
-            background: #232320;
-            border-radius: 10px;
+            background: var(--card-color);
+            border-radius: var(--border-radius-md);
             box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-            padding: 1em 1em 1em 1em;
-            min-width: 180px;
-            max-width: 220px;
-            flex: 1 1 180px;
-            margin-bottom: 0.5em;
-            transition: box-shadow 0.13s, background 0.13s, transform 0.13s;
+            padding: var(--spacing-sm);
+            transition: all 0.2s ease;
             cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-xs);
         }
+        
         .market-card:hover {
             box-shadow: 0 4px 18px rgba(230,58,48,0.13);
             background: #282926;
             transform: translateY(-2px) scale(1.02);
         }
+        
         .market-symbol {
             font-weight: 600;
-            color: #e63a30;
-            font-size: 1.05em;
+            color: var(--main-color);
+            font-size: clamp(0.9rem, 1.1vw, 1.3rem);
         }
+        
         .market-price {
             color: var(--text-color);
-            font-size: 1.15em;
+            font-size: clamp(1rem, 1.2vw, 1.4rem);
             font-weight: 700;
-            margin-bottom: 0.3em;
         }
+        
         .market-currency {
             color: #bdbdb7;
-            font-size: 0.98em;
+            font-size: clamp(0.8rem, 1vw, 1.1rem);
             margin-left: 0.5em;
         }
+        
         .market-chart {
             width: 100% !important;
-            height: 80px !important;
-            min-width: 120px;
+            height: clamp(60px, 8vh, 100px) !important;
+            min-width: 0;
             max-width: 100%;
             display: block;
         }
-        /* News & CVE */
+        
+        /* News et CVE */
         ul {
             list-style: none;
             padding: 0;
             margin: 0;
         }
-        .news-list li, .cve-list li {
-            margin-bottom: 1.2em;
-            background: #232320;
-            border-radius: 8px;
-            padding: 0.7em 0.7em 0.7em 0.9em;
+        
+        .news-list li, .cve-list li, .victim-item {
+            margin-bottom: var(--spacing-sm);
+            background: var(--card-color);
+            border-radius: var(--border-radius-sm);
+            padding: var(--spacing-sm);
             box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-            border-left: 4px solid #e63a30;
-            transition: background 0.13s, opacity 0.13s;
+            border-left: 4px solid var(--main-color);
+            transition: all 0.2s ease;
         }
-        .news-list li:hover, .cve-list li:hover {
+        
+        .news-list li:hover, .cve-list li:hover, .victim-item:hover {
             background: #282926;
         }
-        .news-link,
-        .market-symbol,
-        .shortcut-icon {
-            color: var(--main-color);
-        }
+        
         .news-link {
+            color: var(--main-color);
             text-decoration: none;
-            font-size: 1.09em;
+            font-size: clamp(0.9rem, 1.1vw, 1.2rem);
             font-weight: 600;
-            transition: color 0.13s;
+            transition: color 0.2s ease;
             word-break: break-word;
+            display: block;
+            margin-bottom: var(--spacing-xs);
         }
+        
         .news-link:hover {
-            color: #f7f6f1;
+            color: var(--text-color);
             text-decoration: underline;
         }
+        
         .meta {
-            margin-top: 0.5em;
             display: flex;
             align-items: center;
-            gap: 1em;
+            gap: var(--spacing-sm);
             flex-wrap: wrap;
         }
-        .badge,
-        .cve-score {
+        
+        .badge, .cve-score {
             background: var(--main-color);
             color: var(--text-color);
-            display: inline-block;
-            font-size: 0.93em;
+            font-size: clamp(0.8rem, 0.9vw, 1rem);
             font-weight: 600;
-            border-radius: 6px;
-            padding: 0.18em 0.7em;
-            margin-right: 0.5em;
-            letter-spacing: 0.5px;
+            border-radius: var(--border-radius-sm);
+            padding: 0.2em 0.7em;
         }
-        .date,
-        .cve-date {
+        
+        .date, .cve-date {
             color: #bdbdb7;
-            font-size: 0.95em;
+            font-size: clamp(0.8rem, 0.9vw, 1rem);
             font-style: italic;
         }
+        
         .cve-id {
             font-weight: 600;
-            color: #e63a30;
-            font-size: 1em;
+            color: var(--main-color);
+            font-size: clamp(0.9rem, 1vw, 1.2rem);
         }
-        .cve-score {
-            background: #e63a30;
-            color: #f7f6f1;
-            border-radius: 6px;
-            font-size: 0.93em;
-            font-weight: 600;
-            padding: 0.13em 0.6em;
-            margin-left: 0.5em;
-        }
-        .cve-date {
-            color: #bdbdb7;
-            font-size: 0.95em;
-            font-style: italic;
-            margin-left: 0.5em;
-        }
+        
         .cve-desc {
-            margin-top: 0.4em;
-            font-size: 0.97em;
-            color: #f7f6f1;
+            margin-top: var(--spacing-xs);
+            font-size: clamp(0.8rem, 0.95vw, 1.1rem);
+            color: var(--text-color);
         }
-        .cve-sort {
-            margin-bottom: 0.7em;
-            display: flex;
-            align-items: center;
-            gap: 0.7em;
+        
+        /* Victimes ransomware */
+        .victims-list {
+            flex: 1;
+            overflow-y: auto;
         }
-        .cve-sort label {
-            color: #e63a30;
+        
+        .victim-item.active {
+            background: #282926;
+            border-left: 6px solid var(--text-color);
+        }
+        
+        .victim-title {
             font-weight: 600;
+            color: var(--main-color);
+            font-size: clamp(0.9rem, 1vw, 1.1rem);
         }
-        .cve-sort select {
-            background: #1e1f1d;
-            color: #f7f6f1;
-            border: 1px solid #e63a30;
-            border-radius: 4px;
-            padding: 0.2em 0.7em;
-            font-size: 1em;
+        
+        .victim-group, .victim-country, .victim-date {
+            color: #bdbdb7;
+            font-size: clamp(0.8rem, 0.9vw, 1rem);
+            margin-left: 0.5em;
         }
-        /* Recherche news */
-        .news-search-bar {
-            margin-bottom: 1em;
+        
+        /* Raccourcis */
+        .shortcuts-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(clamp(120px, 15vw, 180px), 1fr));
+            gap: var(--spacing-sm);
+            flex: 1; /* Prend tout l'espace disponible dans la carte */
+            overflow-y: auto;
+            padding-right: var(--spacing-xs);
+            align-content: start; /* Aligne les éléments en haut */
+        }
+        
+        /* Pour les écrans Ultra-Wide, pas de scroll */
+        @media (min-width: 2560px) {
+            .shortcuts-list {
+                overflow-y: visible;
+                padding-right: 0;
+            }
+        }
+        
+        .shortcut-item {
             display: flex;
             align-items: center;
-            gap: 0.7em;
+            gap: var(--spacing-xs);
+            background: #282926;
+            border-radius: var(--border-radius-sm);
+            padding: var(--spacing-sm);
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: clamp(0.9rem, 1vw, 1.2rem);
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
         }
-        .news-search-bar input[type="text"] {
+        
+        .shortcut-item:hover {
+            background: var(--main-color);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(230,58,48,0.13);
+        }
+        
+        .shortcut-icon {
+            font-size: clamp(1.1rem, 1.3vw, 1.6rem);
+            color: var(--main-color);
+            min-width: 1.3em;
+        }
+        
+        .shortcut-item:hover .shortcut-icon {
+            color: #fff;
+        }
+        
+        /* Éléments de contrôle */
+        .news-search-bar, .cve-sort {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-sm);
+            flex-shrink: 0;
+        }
+        
+        .news-search-bar input[type="text"], .cve-sort select {
             background: #1e1f1d;
-            color: #f7f6f1;
-            border: 1px solid #e63a30;
-            border-radius: 4px;
-            padding: 0.4em 1em;
-            font-size: 1em;
-            width: 100%;
-            max-width: 320px;
+            color: var(--text-color);
+            border: 1px solid var(--main-color);
+            border-radius: var(--border-radius-sm);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            font-size: clamp(0.8rem, 0.9vw, 1rem);
+            flex: 1;
         }
+        
         .news-search-bar input[type="text"]:focus {
-            outline: 2px solid #e63a30;
-            background: #232320;
+            outline: 2px solid var(--main-color);
+            background: var(--card-color);
             box-shadow: 0 0 0 2px #e63a3033;
         }
-        .news-search-bar i {
-            color: #e63a30;
-            font-size: 1.1em;
+        
+        .news-sort-btn {
+            background: none;
+            border: none;
+            color: var(--main-color);
+            font-size: clamp(1rem, 1.2vw, 1.4rem);
+            cursor: pointer;
+            transition: color 0.2s ease;
+            padding: var(--spacing-xs);
         }
+        
+        .news-sort-btn:hover {
+            color: var(--text-color);
+        }
+        
         /* Modal styles */
         .modal-overlay {
             display: none;
@@ -911,197 +961,79 @@ def index():
             background: rgba(24,26,27,0.93);
             justify-content: center;
             align-items: center;
-            transition: opacity 0.18s;
+            transition: opacity 0.3s ease;
         }
         .modal-overlay.active {
             display: flex;
         }
         .modal-content {
-            background: #232320;
-            border-radius: 18px;
+            background: var(--card-color);
+            border-radius: var(--border-radius-lg);
             box-shadow: 0 8px 48px rgba(30,31,29,0.23);
-            width: 80vw;
-            max-width: 900px;
-            max-height: 80vh;
-            min-height: 320px;
+            width: clamp(300px, 85vw, 1000px);
+            max-height: 85vh;
+            min-height: clamp(200px, 40vh, 400px);
             overflow-y: auto;
-            padding: 2.2em 2em 1.5em 2em;
+            padding: var(--spacing-lg);
             position: relative;
-            color: #f7f6f1;
-            animation: modalIn 0.18s;
+            color: var(--text-color);
+            animation: modalIn 0.3s ease;
         }
         @keyframes modalIn {
-            from { transform: scale(0.97) translateY(30px); opacity: 0.2;}
+            from { transform: scale(0.95) translateY(20px); opacity: 0;}
             to { transform: scale(1) translateY(0); opacity: 1;}
         }
         .modal-close-btn {
             position: absolute;
-            top: 1.1em; right: 1.3em;
+            top: var(--spacing-sm); right: var(--spacing-sm);
             background: none;
             border: none;
-            color: #e63a30;
-            font-size: 2em;
+            color: var(--main-color);
+            font-size: clamp(1.5rem, 2vw, 2.2rem);
             cursor: pointer;
             z-index: 10;
-            transition: color 0.13s;
+            transition: color 0.2s ease;
         }
         .modal-close-btn:hover {
-            color: #f7f6f1;
+            color: var(--text-color);
         }
         .modal-title {
-            font-size: 1.5em;
+            font-size: clamp(1.2rem, 1.8vw, 2rem);
             font-weight: 700;
-            color: #e63a30;
-            margin-bottom: 1em;
+            color: var(--main-color);
+            margin-bottom: var(--spacing-md);
             display: flex;
             align-items: center;
-            gap: 0.5em;
+            gap: var(--spacing-sm);
         }
         .modal-section {
-            margin-bottom: 1.5em;
+            margin-bottom: var(--spacing-md);
         }
         .modal-section:last-child {
             margin-bottom: 0;
         }
-        /* Pour améliorer la lisibilité dans la modal */
         .modal-content ul, .modal-content .markets-row {
-            max-height: 48vh;
+            max-height: 60vh;
             overflow-y: auto;
         }
-        .modal-content .market-card {
-            max-width: 340px;
-            min-width: 220px;
-            font-size: 1.08em;
-        }
-        .modal-content .news-list li, .modal-content .cve-list li {
-            font-size: 1.13em;
-        }
-        .modal-content .victims-list .victim-item {
-            font-size: 1.13em;
-        }
-        @media (max-width: 700px) {
-            .modal-content { width: 98vw; padding: 1.1em 0.5em;}
-        }
-        /* Nouvelle carte ransomware harmonisée */
-        .ransomware-map-container {
-            display: flex;
-            flex-direction: row;
-            width: 100%;
-            max-width: 1200px;
-            margin: 2em auto 0.8em auto; /* ajoute un margin-bottom de 0.8em */
-            background: #232320;
-            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-            border-radius: 16px;
-            min-height: 320px;
-            overflow: hidden;
-            border: 1.5px solid #232320;
-        }
-        .ransomware-map-section {
-            width: 65%;
-            min-width: 0;
-            height: 320px;
-            border-radius: 16px 0 0 16px;
-            background: #232320;
-            position: relative;
-        }
-        #ransom-map {
-            width: 100%;
-            height: 320px;
-            border-radius: 16px 0 0 16px;
-            margin: 0;
-            box-shadow: none;
-            background: #1e1f1d;
-        }
-        .victims-panel {
-            width: 35%;
-            min-width: 220px;
-            max-width: 400px;
-            background: #232320;
-            border-left: 1.5px solid #282926;
-            padding: 1.1em 0.7em 1.1em 1.1em;
-            overflow-y: auto;
-            height: 320px;
-            border-radius: 0 16px 16px 0;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            z-index: 5;
-            margin-bottom: 0.5em; /* ajoute un léger espace sous le panneau */
-        }
-        .victims-panel-title {
-            color: #e63a30;
-            font-size: 1.13em;
-            font-weight: 700;
-            margin-bottom: 0.7em;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 0.5em;
-            border-bottom: 2px solid #e63a30;
-            padding-bottom: 0.2em;
-            margin-bottom: 0.7em;
-            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
-        }
-        .victims-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            flex: 1 1 0;
-            overflow-y: auto;
-        }
-        .victim-item {
-            background: #232320;
-            border-radius: 8px;
-            padding: 0.5em 0.7em;
-            margin-bottom: 0.5em;
-            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-            border-left: 4px solid #e63a30;
-            cursor: pointer;
-            transition: background 0.13s, opacity 0.13s, border-left 0.13s;
-        }
-        .victim-item:hover, .victim-item.active {
-            background: #282926;
-            border-left: 6px solid #f7f6f1;
-        }
-        .victim-title {
-            font-weight: 600;
-            color: #e63a30;
-        }
-        .victim-group {
-            color: #bdbdb7;
-            font-size: 0.97em;
-            margin-left: 0.5em;
-        }
-        .victim-country {
-            color: #bdbdb7;
-            font-size: 0.97em;
-            margin-left: 0.5em;
-        }
-        .victim-date {
-            color: #bdbdb7;
-            font-size: 0.95em;
-            font-style: italic;
-            margin-left: 0.5em;
-        }
-        /* Carte Leaflet custom */
+        
+        /* Leaflet custom styles */
         .leaflet-container {
             background: #1e1f1d !important;
-            border-radius: 16px 0 0 16px;
+            border-radius: var(--border-radius-lg) 0 0 var(--border-radius-lg);
             font-family: 'Montserrat', Arial, sans-serif;
         }
         .leaflet-popup-content-wrapper, .leaflet-tooltip {
             background: var(--card-color) !important;
             color: var(--text-color) !important;
-            border: 1.5px solid var(--main-color) !important;
-            border-radius: 10px !important;
-            font-size: 1em;
+            border: 2px solid var(--main-color) !important;
+            border-radius: var(--border-radius-md) !important;
+            font-size: clamp(0.8rem, 1vw, 1.1rem);
             box-shadow: 0 2px 12px rgba(30,31,29,0.13);
         }
         .leaflet-popup-tip, .leaflet-tooltip-tip {
             background: var(--main-color) !important;
         }
-        /* Pulse animation pour marker actif */
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(230,58,48,0.5);}
             70% { box-shadow: 0 0 0 12px rgba(230,58,48,0);}
@@ -1109,169 +1041,167 @@ def index():
         }
         .leaflet-interactive.pulse {
             animation: pulse 1.2s infinite;
-            stroke: #f7f6f1 !important;
+            stroke: var(--text-color) !important;
             stroke-width: 3 !important;
         }
-        /* Responsive */
-        @media (max-width: 900px) {
-            .ransomware-map-container {
-                flex-direction: column;
-                min-height: 0;
-                border-radius: 16px;
-                width: 98vw !important;
-                max-width: 98vw !important;
+        
+        /* Media Queries Responsive */
+        
+        /* Tablets en mode portrait et petits écrans */
+        @media (max-width: 1024px) {
+            :root {
+                --base-font-size: clamp(12px, 2vw, 18px);
             }
-            .ransomware-map-section, #ransom-map {
-                width: 100%;
-                height: 220px;
-                border-radius: 16px 16px 0 0;
-            }
-            .victims-panel {
-                width: 100%;
-                max-width: none;
-                border-radius: 0 0 16px 16px;
-                border-left: none;
-                border-top: 1.5px solid #282926;
-                height: 180px;
-            }
-        }
-        /* Carte raccourcis personnalisés */
-        .shortcuts-card {
-            background: #232320;
-            border-radius: 14px;
-            box-shadow: 0 2px 12px rgba(30,31,29,0.13);
-            padding: 1.2em 1em 1em 1em;
-            margin-bottom: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 1em;
-            min-height: 0;
-            align-items: flex-start;
-        }
-        .shortcuts-title {
-            color: #e63a30;
-            font-size: 1.13em;
-            font-weight: 700;
-            margin-bottom: 0.3em;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 0.5em;
-            border-bottom: 2px solid #e63a30;
-            padding-bottom: 0.2em;
-            margin-bottom: 0.7em;
-            background: linear-gradient(90deg, #e63a3022 60%, transparent 100%);
-            cursor: pointer;
-        }
-        .shortcuts-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.7em;
-        }
-        .shortcut-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5em;
-            background: #282926;
-            border-radius: 8px;
-            padding: 0.5em 0.9em;
-            color: #f7f6f1;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 1.05em;
-            transition: background 0.13s, color 0.13s, box-shadow 0.13s;
-            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-        }
-        .shortcut-item:hover {
-            background: #e63a30;
-            color: #fff;
-            box-shadow: 0 2px 12px rgba(230,58,48,0.13);
-        }
-        .shortcut-icon {
-            font-size: 1.3em;
-            min-width: 1.3em;
-            color: #e63a30;
-        }
-        .shortcut-item:hover .shortcut-icon {
-            color: #fff;
-        }
-        /* Barre de recherche Google */
-        .google-search-bar-container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0.7em auto 0.7em auto; /* même espace haut et bas */
-            display: flex;
-            justify-content: center;
-        }
-        .google-search-bar {
-            display: flex;
-            align-items: center;
-            background: #232320;
-            border-radius: 10px;
-            box-shadow: 0 1px 4px rgba(30,31,29,0.07);
-            padding: 0.5em 1em;
-            width: 100%;
-            max-width: 480px;
-            border: 1.5px solid #e63a30;
-            gap: 0.7em;
-        }
-        .google-search-bar input[type="text"] {
-            background: transparent;
-            color: #f7f6f1;
-            border: none;
-            outline: none;
-            font-size: 1.1em;
-            width: 100%;
-            padding: 0.3em 0.2em;
-        }
-        .google-search-bar i {
-            color: #e63a30;
-            font-size: 1.2em;
-        }
-        /* Responsive pour la colonne centrale */
-        @media (max-width: 1200px) {
+            
             .dashboard-main {
-                flex-direction: column;
+                grid-template-columns: 1fr;
+                gap: var(--spacing-sm);
             }
-            .dashboard-left, .dashboard-center, .dashboard-right {
-                min-width: 0;
-                width: 100%;
+            
+            .ransomware-map-container {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
+            .victims-panel {
+                border-left: none;
+                border-top: 2px solid #282926;
+                border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+                height: clamp(150px, 20vh, 250px);
+            }
+            
+            #ransom-map {
+                border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+                height: clamp(200px, 25vh, 300px);
+            }
+            
+            .shortcuts-list {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            }
+            
+            .markets-row {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             }
         }
-        /* Ajout du footer */
-        .footer-madeby {
-            width: 100vw;
-            text-align: center;
-            color: #bdbdb7;
-            font-size: 1em;
-            margin: 2.5em 0 0.5em 0;
-            letter-spacing: 0.5px;
-            font-family: 'Montserrat', Arial, sans-serif;
-            opacity: 0.85;
+        
+        /* Smartphones */
+        @media (max-width: 768px) {
+            :root {
+                --base-font-size: clamp(10px, 3vw, 16px);
+                --spacing-xs: clamp(0.2rem, 1vw, 0.5rem);
+                --spacing-sm: clamp(0.3rem, 1.5vw, 1rem);
+                --spacing-md: clamp(0.8rem, 2.5vw, 2rem);
+            }
+            
+            body {
+                grid-template-rows: auto auto 1fr;
+            }
+            
+            .ransomware-map-container, .dashboard-main {
+                width: 98vw;
+                max-width: 98vw;
+            }
+            
+            .google-search-bar {
+                width: clamp(250px, 90vw, 400px);
+            }
+            
+            .victims-panel {
+                height: clamp(120px, 15vh, 180px);
+            }
+            
+            #ransom-map {
+                height: clamp(150px, 20vh, 220px);
+            }
+            
+            .shortcuts-list {
+                grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            }
+            
+            .markets-row {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .modal-content {
+                width: 95vw;
+                padding: var(--spacing-md);
+            }
         }
-        .footer-madeby .heart {
-            color: #e63a30;
-            font-size: 1.1em;
-            vertical-align: middle;
+        
+        /* Grands écrans */
+        @media (min-width: 1440px) {
+            .dashboard-main {
+                grid-template-columns: 1.2fr clamp(250px, 22vw, 400px) 1fr;
+            }
         }
-        /* Ajout style pour le bouton de tri actualités */
-        .news-sort-btn {
-            background: none;
-            border: none;
-            color: #e63a30;
-            font-size: 1.25em;
-            cursor: pointer;
-            margin-left: 0.3em;
-            transition: color 0.13s;
-            display: flex;
-            align-items: center;
-            padding: 0 0.2em;
+        
+        /* Écrans ultra-larges */
+        @media (min-width: 1920px) {
+            .dashboard-main {
+                grid-template-columns: 1.5fr clamp(300px, 20vw, 450px) 1.2fr;
+            }
+            
+            .markets-row {
+                grid-template-columns: repeat(auto-fit, minmax(clamp(180px, 12vw, 240px), 1fr));
+            }
         }
-        .news-sort-btn:hover {
-            color: #f7f6f1;
+        
+        /* Écrans 4K et plus - Ultra-Wide */
+        @media (min-width: 2560px) {
+            .dashboard-main {
+                grid-template-columns: 1.8fr clamp(350px, 18vw, 500px) 1.5fr;
+            }
+            
+            .markets-row {
+                grid-template-columns: repeat(auto-fit, minmax(clamp(200px, 10vw, 280px), 1fr));
+            }
+            
+            .shortcuts-list {
+                grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 12vw, 200px), 1fr));
+                max-height: none !important; /* Pas de limitation sur les écrans Ultra-Wide */
+                overflow-y: visible !important;
+                padding-right: 0 !important;
+            }
         }
-        .news-sort-btn:focus {
-            outline: 2px solid #e63a30;
+        
+        /* Mode paysage pour mobiles */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .ransomware-map-container {
+                height: clamp(180px, 35vh, 280px);
+            }
+            
+            #ransom-map {
+                height: clamp(120px, 25vh, 200px);
+            }
+            
+            .victims-panel {
+                height: clamp(80px, 15vh, 120px);
+            }
+        }
+        
+        /* Préférences d'accessibilité */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* Adaptation aux écrans haute densité */
+        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+            .market-chart {
+                image-rendering: -webkit-optimize-contrast;
+                image-rendering: crisp-edges;
+            }
+        }
+        
+        /* Mode sombre natif du système */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #0f1011;
+                --card-color: #1a1b1c;
+            }
         }
         </style>
         <script>
@@ -1339,7 +1269,7 @@ def index():
                 });
                 const ul = document.getElementById('news-list');
                 ul.innerHTML = '';
-                filtered.slice(0, 20).forEach(item => {
+                filtered.forEach(item => {
                     const li = document.createElement('li');
                     li.innerHTML = `
                         <a class="news-link" href="${item.link}" target="_blank">${item.title}</a>
@@ -1407,10 +1337,14 @@ def index():
                     }
                 });
             }
-            // Graphiques interactifs avec tooltip prix
+            // Graphiques interactifs avec tooltip prix et redimensionnement automatique
             function renderMarkets() {
                 const container = document.getElementById('markets-row');
+                if (!container) return;
+                
+                const layout = calculateOptimalDimensions();
                 container.innerHTML = '';
+                
                 MARKETS.forEach(asset => {
                     const card = document.createElement('div');
                     card.className = 'market-card';
@@ -1419,11 +1353,17 @@ def index():
                         <div class="market-price">${asset.price !== null ? asset.price.toLocaleString('fr-FR', {maximumFractionDigits: 2}) : 'N/A'}
                             <span class="market-currency">${asset.currency}</span>
                         </div>
-                        <canvas id="chart-${asset.symbol.replace(/[^a-zA-Z0-9]/g,'')}" class="market-chart" width="180" height="80"></canvas>
+                        <canvas id="chart-${asset.symbol.replace(/[^a-zA-Z0-9]/g,'')}" class="market-chart"></canvas>
                     `;
                     container.appendChild(card);
+                    
                     if (asset.history && asset.history.length > 1) {
-                        const ctx = card.querySelector('canvas').getContext('2d');
+                        // Calculer la taille du graphique dynamiquement
+                        const chartHeight = Math.max(60, Math.min(120, layout.screen.height * 0.08));
+                        const canvas = card.querySelector('canvas');
+                        canvas.style.height = `${chartHeight}px`;
+                        
+                        const ctx = canvas.getContext('2d');
                         let history = asset.history.filter(h => h.price !== null);
                         if (history.length > 30) {
                             const step = Math.max(1, Math.floor(history.length / 30));
@@ -1431,6 +1371,7 @@ def index():
                         }
                         const labels = history.map(h => h.date);
                         const data = history.map(h => h.price);
+                        
                         new Chart(ctx, {
                             type: 'line',
                             data: {
@@ -1442,6 +1383,7 @@ def index():
                                     backgroundColor: 'rgba(230,58,48,0.08)',
                                     tension: 0.2,
                                     pointRadius: 0,
+                                    borderWidth: layout.screen.isMobile ? 1.5 : 2
                                 }]
                             },
                             options: {
@@ -1465,8 +1407,10 @@ def index():
                                     x: { display: false },
                                     y: { display: false }
                                 },
-                                elements: { line: { borderWidth: 2 } },
-                                responsive: false,
+                                elements: { 
+                                    line: { borderWidth: layout.screen.isMobile ? 1.5 : 2 } 
+                                },
+                                responsive: true,
                                 maintainAspectRatio: false,
                                 hover: { mode: 'nearest', intersect: false }
                             }
@@ -1474,6 +1418,11 @@ def index():
                     }
                 });
             }
+            // Fonction pour déterminer combien de victimes afficher
+            function getVictimsLimit() {
+                return calculateOptimalDimensions().optimalCounts.victims;
+            }
+            
             function renderVictimsPanel() {
                 const panel = document.getElementById('victims-list');
                 panel.innerHTML = '';
@@ -1481,6 +1430,8 @@ def index():
                     panel.innerHTML = '<li>Aucune victime récente.</li>';
                     return;
                 }
+                
+                // Affiche toutes les victimes disponibles avec scroll
                 ALL_VICTIMS.forEach((v, idx) => {
                     const li = document.createElement('li');
                     li.className = 'victim-item';
@@ -1583,6 +1534,7 @@ def index():
                         });
                         const ul = document.getElementById('modal-news-list');
                         ul.innerHTML = '';
+                        // Afficher tous les éléments dans la modal, sans limite
                         filtered.forEach(item => {
                             const li = document.createElement('li');
                             li.innerHTML = `
@@ -1767,15 +1719,17 @@ def index():
             });
             // ----------- FIN MODAL LOGIC -----------
 
-            // Affichage dynamique des raccourcis
+            // Affichage dynamique des raccourcis avec gestion du scroll
             function renderShortcuts() {
                 const container = document.getElementById('shortcuts-list');
                 if (!container) return;
+                
                 container.innerHTML = '';
                 if (SHORTCUTS.length === 0) {
                     container.innerHTML = '<span style="color:#bdbdb7;">Aucun raccourci défini.</span>';
                     return;
                 }
+                
                 SHORTCUTS.forEach(item => {
                     const a = document.createElement('a');
                     a.className = 'shortcut-item';
@@ -1784,6 +1738,9 @@ def index():
                     a.innerHTML = `<span class="shortcut-icon"><i class="${item.icon}"></i></span> ${item.name}`;
                     container.appendChild(a);
                 });
+                
+                // La liste utilise maintenant flex: 1 en CSS pour prendre tout l'espace disponible
+                // et overflow-y: auto pour le scroll automatique quand nécessaire
             }
 
             // Barre de recherche Google
@@ -1800,22 +1757,212 @@ def index():
                 });
             }
 
+            // ---- FONCTIONS DE DÉTECTION ET CALCULS DYNAMIQUES ---- //
+            
+            // Détection intelligente de la résolution et du type d'écran
+            function getScreenInfo() {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                const aspectRatio = width / height;
+                const pixelRatio = window.devicePixelRatio || 1;
+                
+                return {
+                    width,
+                    height,
+                    aspectRatio,
+                    pixelRatio,
+                    isMobile: width <= 768,
+                    isTablet: width > 768 && width <= 1024,
+                    isDesktop: width > 1024 && width <= 1920,
+                    isLargeDesktop: width > 1920 && width <= 2560,
+                    isUltraWide: width > 2560,
+                    isHighDPI: pixelRatio >= 2,
+                    orientation: width > height ? 'landscape' : 'portrait'
+                };
+            }
+            
+            // Calculs dynamiques basés sur l'espace disponible réel
+            function calculateOptimalDimensions() {
+                const screen = getScreenInfo();
+                const safeArea = {
+                    width: screen.width * 0.95, // 95% de la largeur d'écran
+                    height: screen.height - 80   // Hauteur moins les barres et marges
+                };
+                
+                // Calcul de la hauteur de la carte ransomware (20-30% de l'écran)
+                const mapHeight = Math.max(200, Math.min(400, screen.height * 0.25));
+                
+                // Hauteur disponible pour le contenu principal
+                const availableHeight = safeArea.height - mapHeight - 60; // 60px pour la barre de recherche
+                
+                // Calcul du nombre optimal d'éléments affichables
+                const itemHeights = {
+                    news: screen.isMobile ? 80 : screen.isTablet ? 90 : 100,
+                    cve: screen.isMobile ? 100 : screen.isTablet ? 110 : 120,
+                    victim: screen.isMobile ? 60 : screen.isTablet ? 70 : 80,
+                    market: screen.isMobile ? 120 : screen.isTablet ? 140 : 160
+                };
+                
+                return {
+                    screen,
+                    safeArea,
+                    mapHeight,
+                    availableHeight,
+                    itemHeights,
+                    optimalCounts: {
+                        news: Math.max(3, Math.floor(availableHeight / 2 / itemHeights.news)),
+                        cve: Math.max(3, Math.floor(availableHeight / 2 / itemHeights.cve)),
+                        victims: 999, // Pas de limite, utilisation du scroll
+                        marketColumns: screen.isMobile ? 2 : 
+                                     screen.isTablet ? 3 : 
+                                     screen.isDesktop ? 4 : 
+                                     screen.isLargeDesktop ? 5 : 6
+                    }
+                };
+            }
+            
+            // Application des styles dynamiques basés sur les calculs
+            function applyDynamicLayout() {
+                const layout = calculateOptimalDimensions();
+                
+                // Suppression des anciens styles dynamiques
+                const oldStyle = document.getElementById('dynamic-layout-styles');
+                if (oldStyle) oldStyle.remove();
+                
+                // Création des nouveaux styles
+                const style = document.createElement('style');
+                style.id = 'dynamic-layout-styles';
+                
+                style.textContent = `
+                    /* Styles calculés dynamiquement */
+                    .ransomware-map-container {
+                        height: ${layout.mapHeight}px !important;
+                    }
+                    
+                    .victims-panel, #ransom-map, .ransomware-map-section {
+                        height: ${layout.mapHeight}px !important;
+                    }
+                    
+                    .dashboard-main {
+                        height: ${layout.availableHeight}px !important;
+                        max-height: ${layout.availableHeight}px !important;
+                    }
+                    
+                    .markets-row {
+                        grid-template-columns: repeat(${layout.optimalCounts.marketColumns}, 1fr) !important;
+                    }
+                    
+                    /* Ajustements responsive spécifiques */
+                    ${layout.screen.isMobile ? `
+                        .dashboard-main {
+                            grid-template-columns: 1fr !important;
+                            gap: 1vh !important;
+                        }
+                        .google-search-bar {
+                            width: 90vw !important;
+                        }
+                    ` : ''}
+                    
+                    ${layout.screen.isTablet ? `
+                        .dashboard-main {
+                            grid-template-columns: 1fr !important;
+                            gap: 1.5vh !important;
+                        }
+                    ` : ''}
+                    
+                    ${layout.screen.isUltraWide ? `
+                        .dashboard-main {
+                            grid-template-columns: 2fr 1fr 1.5fr !important;
+                            gap: 2vw !important;
+                        }
+                        .markets-row {
+                            grid-template-columns: repeat(${Math.min(8, layout.optimalCounts.marketColumns + 2)}, 1fr) !important;
+                        }
+                    ` : ''}
+                `;
+                
+                document.head.appendChild(style);
+                
+                return layout;
+            }
+            
+            // Fonctions de rendu optimisées
+            function getNewsLimit() {
+                return calculateOptimalDimensions().optimalCounts.news;
+            }
+            
+            function getCVELimit() {
+                return calculateOptimalDimensions().optimalCounts.cve;
+            }
+            
+            function getVictimsLimit() {
+                return calculateOptimalDimensions().optimalCounts.victims;
+            }
+            
+            function getMarketColumns() {
+                return calculateOptimalDimensions().optimalCounts.marketColumns;
+            }
+            
+            // Détection de changements d'orientation
+            function handleOrientationChange() {
+                setTimeout(() => {
+                    applyDynamicLayout();
+                    if (map) {
+                        map.invalidateSize();
+                    }
+                    renderNews();
+                    renderCVEs();
+                    renderMarkets();
+                    renderVictimsPanel();
+                }, 300);
+            }
+            
+            // Gestion intelligente du redimensionnement
+            let resizeTimeout, lastScreenInfo = null;
+            function handleResize() {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    const currentScreen = getScreenInfo();
+                    
+                    // Ne pas recalculer si les changements sont mineurs
+                    if (lastScreenInfo && 
+                        Math.abs(currentScreen.width - lastScreenInfo.width) < 50 &&
+                        Math.abs(currentScreen.height - lastScreenInfo.height) < 50) {
+                        return;
+                    }
+                    
+                    lastScreenInfo = currentScreen;
+                    applyDynamicLayout();
+                    
+                    // Mise à jour de l'interface
+                    renderNews();
+                    renderCVEs();
+                    renderMarkets();
+                    renderVictimsPanel();
+                    
+                    if (map) {
+                        map.invalidateSize();
+                    }
+                }, 250);
+            }
+
             document.addEventListener('DOMContentLoaded', function() {
-                // Suppression dashboard cards
-                // document.getElementById('dash-news').textContent = DASH.news;
-                // document.getElementById('dash-cves').textContent = DASH.cves;
-                // document.getElementById('dash-ransom').textContent = DASH.ransomware;
-                // document.getElementById('dash-markets').textContent = DASH.markets;
-                // News, CVE, Markets
+                // Initialisation avec layout dynamique
+                const initialLayout = applyDynamicLayout();
+                lastScreenInfo = initialLayout.screen;
+                
+                // Initialisation des composants avec les nouvelles dimensions
                 renderNews();
                 renderCVEs();
                 renderMarkets();
+                
                 // Recherche dynamique news
                 const searchInput = document.getElementById('news-search-input');
                 if (searchInput) {
                     searchInput.addEventListener('input', renderNews);
                 }
-                // Ajout gestion bouton de tri actualités
+                
+                // Gestion bouton de tri actualités
                 const sortBtn = document.getElementById('news-sort-btn');
                 if (sortBtn) {
                     sortBtn.addEventListener('click', function() {
@@ -1823,29 +1970,42 @@ def index():
                         renderNews();
                     });
                 }
+                
                 // Carte ransomware + markers
                 if (document.getElementById('ransom-map')) {
-                    map = L.map('ransom-map', {scrollWheelZoom: false, zoomControl: true, attributionControl: false}).setView([48, 8], 4.1);
+                    map = L.map('ransom-map', {
+                        scrollWheelZoom: !initialLayout.screen.isMobile,
+                        zoomControl: true, 
+                        attributionControl: false
+                    }).setView([48, 8], initialLayout.screen.isMobile ? 3.5 : 4.1);
+                    
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                         attribution: '',
-                        maxZoom: 8,
+                        maxZoom: initialLayout.screen.isMobile ? 6 : 8,
                         minZoom: 2,
                     }).addTo(map);
+                    
                     RANSOMWARE.forEach(item => {
+                        const radius = getRadius(item.count);
                         const marker = L.circleMarker(item.coords, {
-                            radius: getRadius(item.count),
+                            radius: initialLayout.screen.isMobile ? radius * 0.8 : radius,
                             color: "#e63a30",
                             fillColor: "#e63a30",
                             fillOpacity: 0.55,
                             weight: 2,
                             className: "ransom-marker"
                         }).addTo(map);
-                        marker.bindTooltip(`${item.country_name}: ${item.count} victime${item.count>1?'s':''}`, {permanent: false, direction: 'top', offset: [0,-2]});
+                        
+                        marker.bindTooltip(`${item.country_name}: ${item.count} victime${item.count>1?'s':''}`, {
+                            permanent: false, 
+                            direction: 'top', 
+                            offset: [0,-2]
+                        });
                         marker.bindPopup(popupContent(item.country_name, item.victims));
                         markers[item.country] = marker;
+                        
                         marker.on('click', function() {
                             marker.openPopup();
-                            // Pulse sur marker
                             if (lastPulseMarker && lastPulseMarker._path) lastPulseMarker._path.classList.remove('pulse');
                             if (marker._path) {
                                 marker._path.classList.add('pulse');
@@ -1854,31 +2014,46 @@ def index():
                         });
                     });
                 }
+                
                 // Panneau victimes
                 renderVictimsPanel();
+                
                 // Tri CVE
                 document.getElementById('cve-sort-select').addEventListener('change', renderCVEs);
-                // Scroll to top button
-                const scrollBtn = document.getElementById('scrollTopBtn');
-                window.addEventListener('scroll', function() {
-                    if (window.scrollY > 200) {
-                        scrollBtn.style.display = 'block';
-                    } else {
-                        scrollBtn.style.display = 'none';
-                    }
-                });
-                scrollBtn.addEventListener('click', function() {
-                    window.scrollTo({top: 0, behavior: 'smooth'});
-                });
-                // Ajout ouverture modale sur clic titre
+                
+                // Ouverture modale sur clic titre
                 document.getElementById('markets-title').addEventListener('click', function() { openModal('markets'); });
                 document.getElementById('news-title').addEventListener('click', function() { openModal('news'); });
                 document.getElementById('cves-title').addEventListener('click', function() { openModal('cves'); });
                 document.getElementById('ransomware-title').addEventListener('click', function() { openModal('ransomware'); });
+                
                 // Raccourcis
                 renderShortcuts();
+                
                 // Barre de recherche Google
                 setupGoogleSearchBar();
+                
+                // Gestionnaires d'événements pour l'adaptation dynamique
+                window.addEventListener('resize', handleResize);
+                window.addEventListener('orientationchange', handleOrientationChange);
+                
+                // Support pour les écrans pliables et autres changements d'état
+                if (window.screen && window.screen.orientation) {
+                    window.screen.orientation.addEventListener('change', handleOrientationChange);
+                }
+                
+                // Optimisation des performances sur mobile
+                if (initialLayout.screen.isMobile) {
+                    // Réduire la fréquence de mise à jour pour économiser la batterie
+                    window.addEventListener('scroll', function(e) {
+                        e.preventDefault();
+                    }, { passive: false });
+                }
+                
+                // Détection du mode plein écran
+                document.addEventListener('fullscreenchange', function() {
+                    setTimeout(handleResize, 100);
+                });
             });
         </script>
     </head>
@@ -1912,7 +2087,7 @@ def index():
                 <ul class="victims-list" id="victims-list"></ul>
             </div>
         </div>
-        <div class="dashboard-main" style="display:flex; gap:2em; max-width:1200px; margin:0 auto 2em auto; align-items:flex-start;">
+        <div class="dashboard-main">
             <div class="dashboard-left">
                 <div class="card">
                     <div class="card-title" id="markets-title" tabindex="0">
@@ -1923,7 +2098,7 @@ def index():
                 </div>
             </div>
             <!-- Colonne centrale pour les raccourcis -->
-            <div class="dashboard-center" style="flex:0.7 1 0; min-width:220px; max-width:320px; display:flex; flex-direction:column; gap:2em;">
+            <div class="dashboard-center">
                 <div class="shortcuts-card">
                     <div class="shortcuts-title" id="shortcuts-title">
                         <i class="fa-solid fa-bolt"></i> Raccourcis personnalisés
@@ -1969,7 +2144,6 @@ def index():
                 </div>
             </div>
         </div>
-        <button id="scrollTopBtn" title="Remonter"><i class="fa-solid fa-arrow-up"></i></button>
         <!-- MODAL OVERLAY -->
         <div class="modal-overlay" id="modal-overlay">
             <div class="modal-content" id="modal-content"></div>
